@@ -32,10 +32,12 @@ USABLE_PROP_ENTITIES = {
 for _, taunt in pairs(HUNTER_TAUNTS) do resource.AddFile("sound/"..taunt) end
 for _, taunt in pairs(PROP_TAUNTS) do resource.AddFile("sound/"..taunt) end
 
-local propTauntFiles = file.Find("sound/taunts/props/*.*", "GAME")
-for _, filename in ipairs(propTauntFiles) do
+-- Only send/allow the taunt files this addon actually ships (see PROP_TAUNT_FILES in
+-- sh_config.lua) - avoids pulling in unrelated files other addons dropped into the
+-- same "sound/taunts/props" folder name.
+for _, filename in ipairs(PROP_TAUNT_FILES) do
 	local ext = string.GetExtensionFromFilename(filename):lower()
-	if ext == "wav" or ext == "mp3" or ext == "ogg" then
+	if (ext == "wav" or ext == "mp3" or ext == "ogg") and file.Exists("sound/taunts/props/" .. filename, "GAME") then
 		resource.AddFile("sound/taunts/props/" .. filename)
 	end
 end
@@ -77,6 +79,7 @@ net.Receive("PH_PlayTaunt", function(len, pl)
 	local taunt = net.ReadString()
 	if !taunt or taunt == "" then return end
 	if not string.StartWith(taunt, "taunts/props/") then return end
+	if !table.HasValue(PROP_TAUNT_FILES, string.GetFileFromFilename(taunt)) then return end
 	if !file.Exists("sound/" .. taunt, "GAME") then return end
 
 	local ext = string.GetExtensionFromFilename(taunt):lower()
@@ -90,11 +93,10 @@ end)
 
 net.Receive("PH_RequestPropTaunts", function(len, pl)
 	if !IsValid(pl) then return end
-	local files = file.Find("sound/taunts/props/*.*", "GAME")
 	local entries = {}
-	for _, filename in ipairs(files) do
+	for _, filename in ipairs(PROP_TAUNT_FILES) do
 		local ext = string.GetExtensionFromFilename(filename):lower()
-		if ext == "wav" or ext == "mp3" or ext == "ogg" then
+		if (ext == "wav" or ext == "mp3" or ext == "ogg") and file.Exists("sound/taunts/props/" .. filename, "GAME") then
 			table.insert(entries, filename)
 		end
 	end
