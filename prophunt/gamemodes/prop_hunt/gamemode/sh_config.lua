@@ -162,6 +162,10 @@ ROUND_TIME = 300
 SWAP_TEAMS_EVERY_ROUND = 1
 
 
+-- Determains if teams should still be swapped when the score is 0-0 [0 = No, 1 = Yes] (Default: 0)
+SWAP_TEAMS_POINTS_ZERO = 0
+
+
 -- If you win, one of these will be played
 -- Set blank to disable
 
