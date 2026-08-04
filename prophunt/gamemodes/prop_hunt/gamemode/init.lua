@@ -46,6 +46,7 @@ util.AddNetworkString("PH_TogglePropRotateLock")
 util.AddNetworkString("PH_PlayTaunt")
 util.AddNetworkString("PH_RequestPropTaunts")
 util.AddNetworkString("PH_PropTauntList")
+util.AddNetworkString("PlayerKilledByPlayer")
 net.Receive("PH_RotateProp", function(len, pl)
 	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
 	if pl:GetNWBool("PH_RotateLocked", false) then return end
@@ -212,7 +213,7 @@ function GM:PlayerUse(pl, ent)
 				start = targetPos + Vector(0, 0, 8),
 				endpos = targetPos - Vector(0, 0, 64),
 				filter = pl.ph_prop,
-				demask = MASK_SOLID_BRUSHONLY
+				mask = MASK_SOLID_BRUSHONLY
 			})
 			if tr.Hit then
 				targetPos = tr.HitPos - Vector(0, 0, propMinZ)
