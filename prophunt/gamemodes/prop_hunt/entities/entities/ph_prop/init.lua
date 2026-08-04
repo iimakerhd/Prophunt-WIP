@@ -46,7 +46,7 @@ function ENT:OnTakeDamage(dmg)
 			
 			attacker:AddFrags(1)
 			pl:AddDeaths(1)
-			attacker:SetHealth(math.Clamp(attacker:Health() + GetConVar("HUNTER_KILL_BONUS"):GetInt(), 1, 100))
+			attacker:SetHealth(math.Clamp(attacker:Health() + HUNTER_KILL_BONUS, 1, 100))
 			
 			pl:RemoveProp()
 		end
