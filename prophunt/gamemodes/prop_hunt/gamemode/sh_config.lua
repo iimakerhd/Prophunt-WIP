@@ -146,6 +146,22 @@ HUNTER_PLAYER_MODELS = {
 	"police"
 }
 
+
+-- Filenames (relative to sound/taunts/props/) that the Prop Taunt Menu [F4/F3] is
+-- allowed to show and play. IMPORTANT: file.Find("sound/taunts/props/*.*", "GAME")
+-- searches every mounted addon at once, not just this one - if another installed
+-- addon happens to use the same "taunts/props" folder name, its files would leak
+-- into this menu too. Listing exact filenames here keeps the menu limited to only
+-- the sounds this addon actually ships. Add the filename here whenever you drop a
+-- new .wav/.mp3/.ogg into content/sound/taunts/props/.
+PROP_TAUNT_FILES = {
+	"GTA_soundtrack.mp3",
+	"abo_khlail.mp3",
+	"do_you_want_me_to_say_your_mother_name.mp3",
+	"sharmota.mp3"
+}
+
+
 -- Seconds a player has to wait before they can taunt again (Default: 2 or 3)
 TAUNT_DELAY = 2
 
