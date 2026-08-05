@@ -245,7 +245,12 @@ function GM:PlayerUse(pl, ent)
 				targetPos = tr.HitPos - Vector(0, 0, propMinZ)
 			end
 			pl.ph_prop:SetPos(targetPos)
-			local ang = ent:GetAngles()
+
+			-- Always stand the prop upright (yaw only). Physics settling can leave a
+			-- ground prop tipped/on its side (e.g. a knocked-over cup) - copying that
+			-- exact world angle made the disguise inherit the same awkward tilt. Only
+			-- the facing direction carries over; pitch/roll reset to a natural pose.
+			local ang = Angle(0, ent:GetAngles().y, 0)
 			pl.ph_prop:SetAngles(ang)
 			pl:SetNWBool("PH_RotateLocked", false)
 			pl:SetNWFloat("PH_PropYaw", ang.y)
