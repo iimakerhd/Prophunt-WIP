@@ -197,6 +197,30 @@ function GM:PlayerUse(pl, ent)
 		if table.HasValue(BANNED_PROP_MODELS, ent:GetModel()) then
 			pl:ChatPrint("That prop has been banned by the server.")
 		elseif ent:GetPhysicsObject():IsValid() && pl.ph_prop:GetModel() != ent:GetModel() then
+			local obbmins = ent:OBBMins()
+			local obbmaxs = ent:OBBMaxs()
+
+			-- Fit check: make sure the new prop's shape actually has room to exist
+			-- where the player is standing before we commit to the switch. Without
+			-- this, grabbing a large/awkward prop in a corner or tight nook would
+			-- just silently clip the visual mesh underground or into walls.
+			local footZ = obbmins.z
+			if footZ > 0 then footZ = 0 end
+			local fitOrigin = pl:GetPos() - Vector(0, 0, footZ)
+			local fitTrace = util.TraceHull({
+				start = fitOrigin,
+				endpos = fitOrigin,
+				mins = obbmins,
+				maxs = obbmaxs,
+				filter = {pl, pl.ph_prop, ent},
+				mask = MASK_PLAYERSOLID_BRUSHONLY
+			})
+
+			if fitTrace.StartSolid then
+				pl:ChatPrint("There isn't enough room to become that prop here.")
+				return true
+			end
+
 			local currentHealth = pl.ph_prop.health or 100
 			local currentMaxHealth = pl.ph_prop.max_health or 100
 			local ent_health = math.Clamp(ent:GetPhysicsObject():GetVolume() / 250, 1, 200)
@@ -226,8 +250,6 @@ function GM:PlayerUse(pl, ent)
 			pl:SetNWBool("PH_RotateLocked", false)
 			pl:SetNWFloat("PH_PropYaw", ang.y)
 			
-			local obbmins = ent:OBBMins()
-			local obbmaxs = ent:OBBMaxs()
 			local width = math.max(1, math.Round(math.abs(obbmins.x) + math.abs(obbmaxs.x)))
 			local depth = math.max(1, math.Round(math.abs(obbmins.y) + math.abs(obbmaxs.y)))
 			local hullz = math.max(1, math.Round(math.abs(obbmins.z) + math.abs(obbmaxs.z)))
