@@ -147,19 +147,16 @@ HUNTER_PLAYER_MODELS = {
 }
 
 
--- Filenames (relative to sound/taunts/props/) that the Prop Taunt Menu [F4/F3] is
--- allowed to show and play. IMPORTANT: file.Find("sound/taunts/props/*.*", "GAME")
--- searches every mounted addon at once, not just this one - if another installed
--- addon happens to use the same "taunts/props" folder name, its files would leak
--- into this menu too. Listing exact filenames here keeps the menu limited to only
--- the sounds this addon actually ships. Add the filename here whenever you drop a
--- new .wav/.mp3/.ogg into content/sound/taunts/props/.
-PROP_TAUNT_FILES = {
-	"GTA_soundtrack.mp3",
-	"abo_khlail.mp3",
-	"do_you_want_me_to_say_your_mother_name.mp3",
-	"sharmota.mp3"
-}
+-- Folder (relative to sound/) that the Prop Taunt Menu [F4/F3] auto-scans for
+-- .wav/.mp3/.ogg files - just drop a new file in content/sound/<this path> and it
+-- shows up automatically next launch, no code edits needed.
+--
+-- IMPORTANT: this MUST stay a folder name unique to this addon. file.Find(..., "GAME")
+-- searches every mounted addon's content merged together - if this were a generic
+-- name like "taunts/props/", any other installed addon using that same folder name
+-- would leak its own sounds into this menu (this happened before - see git history).
+-- Do not rename this back to something generic.
+PROP_TAUNT_FOLDER = "ph_wip_taunts/props/"
 
 
 -- Seconds a player has to wait before they can taunt again (Default: 2 or 3)
