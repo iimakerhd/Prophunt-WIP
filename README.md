@@ -2,8 +2,7 @@
 
 ## 🐛 Known Issues
 
-* **Awkward Prop Positioning:** Props can occasionally have an awkward position, angle, or alignment when picked up by a player.
-* **Taunt Menu Audio:** The taunt menu is currently bugged and is not playing all of the available sounds.
+* **Taunt Menu:** The taunt menu is currently bugged and not listing any audio at all.
 * **HUD/UI Overlap:** Certain HUD elements or UI menus are overlapping each other during gameplay.
 
 ---
