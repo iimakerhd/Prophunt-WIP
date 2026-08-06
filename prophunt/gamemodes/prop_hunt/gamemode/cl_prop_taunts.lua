@@ -133,14 +133,15 @@ concommand.Add("ph_taunt_menu", OpenPropTauntMenu)
 -- This builds its own grid and applies the choice over the network
 -- immediately, live, with no respawn needed.
 --
--- The model list combines TWO sources so both default GMod models and
--- workshop-subscribed ones show up:
---   1) player_manager.AllValidModels() - anything properly registered, which
---      covers default GMod models and well-behaved workshop playermodel packs.
---   2) A recursive filesystem scan of models/player/ - catches workshop packs
---      that just drop .mdl files there without registering via player_manager.
--- Both send the model's actual file path to the server (not a short name),
--- since only a real path can be validated/used for packs from source (2).
+-- Model list comes ONLY from player_manager.AllValidModels() - the same
+-- registry GMod's own stock "Player Model Selector" uses. This is deliberate:
+-- an earlier version also did a raw filesystem scan of models/player/ to try
+-- to catch unregistered workshop packs, but that pulled in hats/accessories/
+-- other non-playermodel content some addons store in that same folder tree.
+-- The registry alone already covers well-behaved workshop playermodels (if it
+-- shows in GMod's own Player Model Selector, it'll show here too) with no
+-- risk of that kind of junk, which matters more than the rare edge case of an
+-- addon that skips registration entirely.
 -- ===========================================================================
 
 local hunterModelMenu
@@ -157,35 +158,10 @@ local function BuildHunterModelList()
     if hunterModelList then return hunterModelList end
 
     local list = {}
-    local seen = {}
-
-    -- Source 1: officially registered models (default GMod + well-behaved addons)
     local registered = player_manager.AllValidModels()
     for niceName, modelPath in pairs(registered) do
-        if not seen[modelPath] then
-            seen[modelPath] = true
-            table.insert(list, {path = modelPath, label = niceName})
-        end
+        table.insert(list, {path = modelPath, label = niceName})
     end
-
-    -- Source 2: recursive scan for any other .mdl under models/player/ that
-    -- wasn't already registered - covers workshop packs that skip registration.
-    local function scan(path)
-        local files, dirs = file.Find(path .. "*", "GAME")
-        for _, f in ipairs(files) do
-            if string.EndsWith(string.lower(f), ".mdl") then
-                local fullPath = path .. f
-                if not seen[fullPath] then
-                    seen[fullPath] = true
-                    table.insert(list, {path = fullPath, label = string.StripExtension(f)})
-                end
-            end
-        end
-        for _, d in ipairs(dirs) do
-            scan(path .. d .. "/")
-        end
-    end
-    scan("models/player/")
 
     table.sort(list, function(a, b) return string.lower(a.label) < string.lower(b.label) end)
 
@@ -205,16 +181,19 @@ local function PopulateHunterModelGrid(filterText)
     for _, entry in ipairs(BuildHunterModelList()) do
         if filterText == "" or string.find(string.lower(entry.label), filterText, 1, true) then
             local holder = vgui.Create("DPanel", hunterModelGrid)
-            holder:SetSize(88, 108)
+            holder:SetSize(68, 68)
             holder.Paint = function(self, w, h)
+                surface.SetDrawColor(30, 30, 30, 200)
+                surface.DrawRect(0, 0, w, h)
                 if entry.path == currentPath then
-                    draw.RoundedBox(6, 0, 0, w, h, Color(95, 155, 255, 90))
+                    surface.SetDrawColor(255, 200, 60, 255)
+                    surface.DrawOutlinedRect(0, 0, w, h, 2)
                 end
             end
 
             local icon = vgui.Create("SpawnIcon", holder)
             icon:SetPos(2, 2)
-            icon:SetSize(84, 84)
+            icon:SetSize(64, 64)
             icon:SetModel(entry.path)
             icon:SetTooltip(entry.path == currentPath and (entry.label .. " (current)") or entry.label)
 
@@ -225,14 +204,6 @@ local function PopulateHunterModelGrid(filterText)
                     hunterModelMenu:Close()
                 end
             end
-
-            local label = vgui.Create("DLabel", holder)
-            label:SetPos(0, 88)
-            label:SetSize(88, 18)
-            label:SetContentAlignment(5)
-            label:SetFont("DermaDefault")
-            label:SetTextColor(Color(220, 220, 220, 255))
-            label:SetText(entry.label)
         end
     end
 end
@@ -257,7 +228,7 @@ local function OpenHunterModelMenu()
 
     hunterModelMenu = vgui.Create("DFrame")
     hunterModelMenu:SetTitle("")
-    hunterModelMenu:SetSize(640, 520)
+    hunterModelMenu:SetSize(560, 520)
     hunterModelMenu:Center()
     hunterModelMenu:MakePopup()
     hunterModelMenu:SetDraggable(false)
@@ -276,7 +247,7 @@ local function OpenHunterModelMenu()
     search:Dock(TOP)
     search:DockMargin(10, 82, 10, 8)
     search:SetTall(26)
-    search:SetPlaceholderText("Search models...")
+    search:SetPlaceholderText("Quick Filter...")
 
     local scroll = vgui.Create("DScrollPanel", hunterModelMenu)
     scroll:Dock(FILL)
@@ -284,8 +255,8 @@ local function OpenHunterModelMenu()
 
     hunterModelGrid = vgui.Create("DIconLayout", scroll)
     hunterModelGrid:Dock(FILL)
-    hunterModelGrid:SetSpaceY(6)
-    hunterModelGrid:SetSpaceX(6)
+    hunterModelGrid:SetSpaceY(4)
+    hunterModelGrid:SetSpaceX(4)
 
     search.OnValueChange = function(self, val)
         PopulateHunterModelGrid(val)
