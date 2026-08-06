@@ -124,13 +124,114 @@ end
 
 concommand.Add("ph_taunt_menu", OpenPropTauntMenu)
 
+
+-- ===========================================================================
+-- Hunter player model menu
+--
+-- Deliberately NOT using the stock "menu_player_model" console command - that
+-- just sets the cl_playermodel convar, which only takes effect on next spawn.
+-- This builds its own grid (same model list GMod's own menu uses, via
+-- player_manager.AllValidModels()) and applies the choice over the network
+-- immediately, live, with no respawn needed.
+-- ===========================================================================
+
+local hunterModelMenu
+local hunterModelGrid
+
+local function ApplyHunterModel(modelKey)
+    net.Start("PH_SetHunterModel")
+        net.WriteString(modelKey)
+    net.SendToServer()
+end
+
+local function PopulateHunterModelGrid()
+    if not IsValid(hunterModelGrid) then return end
+    hunterModelGrid:Clear()
+
+    local ply = LocalPlayer()
+    local currentKey = IsValid(ply) and ply:GetNWString("PH_HunterModel", "combine") or "combine"
+
+    local models = player_manager.AllValidModels()
+    local keys = {}
+    for key in pairs(models) do
+        table.insert(keys, key)
+    end
+    table.sort(keys)
+
+    for _, key in ipairs(keys) do
+        local modelPath = models[key]
+
+        local holder = vgui.Create("DPanel", hunterModelGrid)
+        holder:SetSize(88, 108)
+        holder.Paint = function(self, w, h)
+            if key == currentKey then
+                draw.RoundedBox(6, 0, 0, w, h, Color(95, 155, 255, 90))
+            end
+        end
+
+        local icon = vgui.Create("SpawnIcon", holder)
+        icon:SetPos(2, 2)
+        icon:SetSize(84, 84)
+        icon:SetModel(modelPath)
+        icon:SetTooltip(key == currentKey and (key .. " (current)") or key)
+
+        icon.DoClick = function()
+            ApplyHunterModel(key)
+            currentKey = key
+            if IsValid(hunterModelMenu) then
+                hunterModelMenu:Close()
+            end
+        end
+
+        local label = vgui.Create("DLabel", holder)
+        label:SetPos(0, 88)
+        label:SetSize(88, 18)
+        label:SetContentAlignment(5)
+        label:SetFont("DermaDefault")
+        label:SetTextColor(Color(220, 220, 220, 255))
+        label:SetText(key)
+    end
+end
+
 local function OpenHunterModelMenu()
     local ply = LocalPlayer()
     if not IsValid(ply) or ply:Team() ~= TEAM_HUNTERS then return end
     if not GetGlobalBool("InRound", false) then return end
 
-    RunConsoleCommand("menu_player_model")
+    if IsValid(hunterModelMenu) then
+        hunterModelMenu:Close()
+    end
+
+    hunterModelMenu = vgui.Create("DFrame")
+    hunterModelMenu:SetTitle("")
+    hunterModelMenu:SetSize(620, 480)
+    hunterModelMenu:Center()
+    hunterModelMenu:MakePopup()
+    hunterModelMenu:SetDraggable(false)
+    hunterModelMenu:ShowCloseButton(true)
+    hunterModelMenu:SetDeleteOnClose(true)
+    hunterModelMenu:SetBackgroundBlur(false)
+
+    function hunterModelMenu:Paint(w, h)
+        draw.RoundedBox(10, 0, 0, w, h, Color(15, 15, 15, 210))
+        draw.RoundedBox(10, 10, 10, w - 20, 52, Color(255, 255, 255, 20))
+        draw.SimpleText("Select Hunter Model", "DermaLarge", 20, 16, Color(255, 255, 255, 225), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+        draw.SimpleText("Applies immediately - no need to respawn.", "DermaDefault", 20, 44, Color(200, 200, 200, 180), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+    end
+
+    local scroll = vgui.Create("DScrollPanel", hunterModelMenu)
+    scroll:Dock(FILL)
+    scroll:DockMargin(10, 82, 10, 10)
+
+    hunterModelGrid = vgui.Create("DIconLayout", scroll)
+    hunterModelGrid:Dock(FILL)
+    hunterModelGrid:SetSpaceY(6)
+    hunterModelGrid:SetSpaceX(6)
+
+    PopulateHunterModelGrid()
 end
+
+concommand.Add("ph_hunter_model_menu", OpenHunterModelMenu)
 
 local lastF4Down = false
 hook.Add("Think", "PH_PropTauntMenuF4Bind", function()
@@ -155,5 +256,8 @@ end)
 hook.Add("OnSpawnMenuClose", "PH_PropTauntMenuClose", function()
     if IsValid(propTauntMenu) then
         propTauntMenu:Close()
+    end
+    if IsValid(hunterModelMenu) then
+        hunterModelMenu:Close()
     end
 end)
