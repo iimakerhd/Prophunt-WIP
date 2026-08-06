@@ -1,21 +1,89 @@
 local propTauntMenu
+local propTauntList
 local propTauntEntries = {}
-local OpenPropTauntMenu
-
-net.Receive("PH_PropTauntList", function()
-    propTauntEntries = net.ReadTable() or {}
-    if IsValid(propTauntMenu) then
-        propTauntMenu:Close()
-    end
-    OpenPropTauntMenu()
-end)
 
 local function RequestPropTauntList()
     net.Start("PH_RequestPropTaunts")
     net.SendToServer()
 end
 
-OpenPropTauntMenu = function()
+local function makeTauntLabel(name)
+    local clean = string.StripExtension(name) or name
+    clean = string.gsub(clean, "[_%-]", " ")
+    clean = string.Trim(clean)
+    clean = string.lower(clean)
+    clean = string.gsub(clean, "(%a)([%w_']*)", function(first, rest)
+        return string.upper(first) .. rest
+    end)
+    return clean
+end
+
+local function PopulatePropTauntList()
+    if not IsValid(propTauntList) then return end
+    propTauntList:Clear()
+
+    local entries = {}
+    for _, filename in ipairs(propTauntEntries) do
+        local ext = string.GetExtensionFromFilename(filename):lower()
+        if ext == "wav" or ext == "mp3" or ext == "ogg" then
+            local tauntPath = PROP_TAUNT_FOLDER .. filename
+            local label = makeTauntLabel(filename)
+            table.insert(entries, {sound = tauntPath, label = label})
+        end
+    end
+
+    table.sort(entries, function(a, b)
+        return string.lower(a.label) < string.lower(b.label)
+    end)
+
+    if #entries == 0 then
+        local notice = vgui.Create("DLabel", propTauntList)
+        notice:SetText("No prop taunts found in sound/" .. PROP_TAUNT_FOLDER)
+        notice:Dock(TOP)
+        notice:SetTextColor(Color(220, 220, 220, 255))
+        notice:SetFont("DermaDefaultBold")
+        notice:SizeToContents()
+        return
+    end
+
+    for _, entry in ipairs(entries) do
+        local btn = vgui.Create("DButton", propTauntList)
+        btn:Dock(TOP)
+        btn:DockMargin(0, 0, 0, 8)
+        btn:SetText("")
+        btn.label = entry.label
+        btn:SetFont("DermaDefaultBold")
+        btn:SetTextColor(Color(240, 240, 240, 255))
+        btn:SetTall(36)
+
+        function btn:Paint(w, h)
+            local bg = self:IsHovered() and Color(95, 155, 255, 180) or Color(40, 40, 40, 170)
+            draw.RoundedBox(6, 0, 0, w, h, bg)
+            draw.SimpleText(self.label, self:GetFont(), 14, h * 0.5, Color(255, 255, 255, 230), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+        end
+
+        btn.DoClick = function()
+            net.Start("PH_PlayTaunt")
+                net.WriteString(entry.sound)
+            net.SendToServer()
+            if IsValid(propTauntMenu) then
+                propTauntMenu:Close()
+            end
+        end
+    end
+end
+
+-- Just refresh whatever's currently in the (already open) menu - this must NOT
+-- reopen/recreate the frame. The previous version closed+reopened the whole menu
+-- on every response, and re-requested the list any time it was empty, which meant
+-- an empty list caused an endless close/reopen loop that made the menu impossible
+-- to dismiss. Now a response only ever updates the list contents in place.
+net.Receive("PH_PropTauntList", function()
+    propTauntEntries = net.ReadTable() or {}
+    PopulatePropTauntList()
+end)
+
+local function OpenPropTauntMenu()
     local ply = LocalPlayer()
     if not IsValid(ply) or ply:Team() ~= TEAM_PROPS then return end
     if not GetGlobalBool("InRound", false) then return end
@@ -41,76 +109,17 @@ OpenPropTauntMenu = function()
         draw.SimpleText("Select a sound to play while remaining hidden.", "DermaDefault", 20, 44, Color(200, 200, 200, 180), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
     end
 
-    local list = vgui.Create("DScrollPanel", propTauntMenu)
-    list:Dock(FILL)
-    list:DockMargin(10, 82, 10, 10)
+    propTauntList = vgui.Create("DScrollPanel", propTauntMenu)
+    propTauntList:Dock(FILL)
+    propTauntList:DockMargin(10, 82, 10, 10)
+    propTauntList:GetCanvas():DockPadding(0, 0, 0, 8)
 
-    local canvas = list:GetCanvas()
-    canvas:DockPadding(0, 0, 0, 8)
-
-    local function makeTauntLabel(name)
-        local clean = string.StripExtension(name) or name
-        clean = string.gsub(clean, "[_%-]", " ")
-        clean = string.Trim(clean)
-        clean = string.lower(clean)
-        clean = string.gsub(clean, "(%a)([%w_']*)", function(first, rest)
-            return string.upper(first) .. rest
-        end)
-        return clean
-    end
-
-    if #propTauntEntries == 0 then
-        RequestPropTauntList()
-    end
-
-    local entries = {}
-    for _, filename in ipairs(propTauntEntries) do
-        local ext = string.GetExtensionFromFilename(filename):lower()
-        if ext == "wav" or ext == "mp3" or ext == "ogg" then
-                local tauntPath = "taunts/props/" .. filename
-            local label = makeTauntLabel(filename)
-            table.insert(entries, {sound = tauntPath, label = label})
-        end
-    end
-
-    table.sort(entries, function(a, b)
-        return string.lower(a.label) < string.lower(b.label)
-    end)
-
-    if #entries == 0 then
-        local notice = vgui.Create("DLabel", list)
-        notice:SetText("No prop taunts found in sound/taunts/props.")
-        notice:Dock(TOP)
-        notice:SetTextColor(Color(220, 220, 220, 255))
-        notice:SetFont("DermaDefaultBold")
-        notice:SizeToContents()
-    end
-
-    for _, entry in ipairs(entries) do
-        local btn = vgui.Create("DButton", list)
-        btn:Dock(TOP)
-        btn:DockMargin(0, 0, 0, 8)
-        btn:SetText("")
-        btn.label = entry.label
-        btn:SetFont("DermaDefaultBold")
-        btn:SetTextColor(Color(240, 240, 240, 255))
-        btn:SetTall(36)
-
-        function btn:Paint(w, h)
-            local bg = self:IsHovered() and Color(95, 155, 255, 180) or Color(40, 40, 40, 170)
-            draw.RoundedBox(6, 0, 0, w, h, bg)
-            draw.SimpleText(self.label, self:GetFont(), 14, h * 0.5, Color(255, 255, 255, 230), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
-        end
-
-        btn.DoClick = function()
-            net.Start("PH_PlayTaunt")
-                net.WriteString(entry.sound)
-            net.SendToServer()
-            if IsValid(propTauntMenu) then
-                propTauntMenu:Close()
-            end
-        end
-    end
+    -- Show whatever we currently know (instant, no flicker), then ask the server
+    -- for a fresh list once. The response above only updates the list contents -
+    -- it never touches the frame itself, so the menu stays open/closed exactly
+    -- as the player left it regardless of how many responses arrive.
+    PopulatePropTauntList()
+    RequestPropTauntList()
 end
 
 concommand.Add("ph_taunt_menu", OpenPropTauntMenu)
