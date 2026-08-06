@@ -108,10 +108,44 @@ net.Receive("PH_RequestPropTaunts", function(len, pl)
 	net.Send(pl)
 end)
 
--- Rebuilds a player's first-person view hands to match a given player model key
--- (from player_manager.AllValidModels()). Shared between initial spawn and a live
--- hunter model change so the hands never end up mismatched with the body model.
-local function UTIL_RefreshPlayerHands(pl, modelKey)
+-- ===========================================================================
+-- Hunter player model handling
+--
+-- The hunter model menu (client) sends the model's actual file path rather
+-- than a short registry key - this lets it cover BOTH officially registered
+-- models (player_manager.AllValidModels(), used for default GMod models and
+-- well-behaved workshop packs) AND workshop playermodel packs that just drop
+-- .mdl files under models/player/ without registering themselves. A path is
+-- validated directly against the server's own mounted content instead.
+-- ===========================================================================
+
+local DEFAULT_HUNTER_MODEL = player_manager.AllValidModels()["combine"] or "models/police.mdl"
+
+local function IsValidHunterModelPath(modelPath)
+	if !modelPath or modelPath == "" then return false end
+	if not string.StartWith(modelPath, "models/") then return false end
+	if not string.EndsWith(string.lower(modelPath), ".mdl") then return false end
+	if not file.Exists(modelPath, "GAME") then return false end
+	return true
+end
+
+-- Registered models are keyed by short name -> path; hand models/skins are only
+-- resolvable via that same short name, so if a chosen path happens to match a
+-- registered model, resolve its key for correct matching hands. Anything found
+-- only via filesystem scan (unregistered workshop packs) falls back to generic
+-- hands rather than erroring out.
+local function FindRegisteredKeyForPath(modelPath)
+	local models = player_manager.AllValidModels()
+	for key, path in pairs(models) do
+		if path == modelPath then return key end
+	end
+	return nil
+end
+
+-- Rebuilds a player's first-person view hands to match a given player model
+-- path. Shared between initial spawn and a live hunter model change so the
+-- hands never end up mismatched with the body model.
+local function UTIL_RefreshPlayerHands(pl, modelPath)
 	local oldhands = pl:GetHands()
 	if ( IsValid( oldhands ) ) then oldhands:Remove() end
 
@@ -120,7 +154,7 @@ local function UTIL_RefreshPlayerHands(pl, modelKey)
 		pl:SetHands( hands )
 		hands:SetOwner( pl )
 
-		local handsKey = modelKey or pl:GetInfo( "cl_playermodel" )
+		local handsKey = modelPath and (FindRegisteredKeyForPath(modelPath) or "citizen_male") or pl:GetInfo( "cl_playermodel" )
 		local info = player_manager.TranslatePlayerHands( handsKey )
 		if ( info ) then
 			hands:SetModel( info.model )
@@ -140,27 +174,25 @@ local function UTIL_RefreshPlayerHands(pl, modelKey)
 end
 
 -- Applies a hunter player model immediately, live, with no respawn required:
--- updates the visible body model, the networked key (so it persists across
+-- updates the visible body model, the networked path (so it persists across
 -- spawns/rounds and matches on reconnect), and the first-person hands to match.
-local function UTIL_ApplyHunterModel(pl, modelKey)
-	local models = player_manager.AllValidModels()
-	local modelPath = models[modelKey]
-	if !modelPath then return false end
+local function UTIL_ApplyHunterModel(pl, modelPath)
+	if !IsValidHunterModelPath(modelPath) then return false end
 
-	pl:SetNWString("PH_HunterModel", modelKey)
+	pl:SetNWString("PH_HunterModel", modelPath)
 	util.PrecacheModel(modelPath)
 	pl:SetModel(modelPath)
-	UTIL_RefreshPlayerHands(pl, modelKey)
+	UTIL_RefreshPlayerHands(pl, modelPath)
 	return true
 end
 
 net.Receive("PH_SetHunterModel", function(len, pl)
 	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_HUNTERS then return end
 
-	local modelKey = net.ReadString()
-	if !modelKey or modelKey == "" then return end
+	local modelPath = net.ReadString()
+	if !modelPath or modelPath == "" then return end
 
-	UTIL_ApplyHunterModel(pl, modelKey)
+	UTIL_ApplyHunterModel(pl, modelPath)
 end)
 
 -- Called alot
@@ -213,9 +245,12 @@ function GM:PlayerSetModel(pl)
 	local player_model = "models/Gibs/Antlion_gib_small_3.mdl"
 
 	if pl:Team() == TEAM_HUNTERS then
-		local models = player_manager.AllValidModels()
-		local selectedKey = pl:GetNWString("PH_HunterModel", "combine")
-		player_model = models[selectedKey] or models["combine"] or "models/police.mdl"
+		local stored = pl:GetNWString("PH_HunterModel", "")
+		if IsValidHunterModelPath(stored) then
+			player_model = stored
+		else
+			player_model = DEFAULT_HUNTER_MODEL
+		end
 	end
 	
 	-- Precache it
@@ -383,11 +418,16 @@ end)
 -- Called when the players spawns
 function PlayerSpawn(pl)
 
-	local handsKey = nil
+	local handsPath = nil
 	if pl:Team() == TEAM_HUNTERS then
-		handsKey = pl:GetNWString("PH_HunterModel", "combine")
+		local stored = pl:GetNWString("PH_HunterModel", "")
+		if not IsValidHunterModelPath(stored) then
+			stored = DEFAULT_HUNTER_MODEL
+			pl:SetNWString("PH_HunterModel", stored)
+		end
+		handsPath = stored
 	end
-	UTIL_RefreshPlayerHands(pl, handsKey)
+	UTIL_RefreshPlayerHands(pl, handsPath)
 
 	pl:Blind(false)
 	pl:RemoveProp()
