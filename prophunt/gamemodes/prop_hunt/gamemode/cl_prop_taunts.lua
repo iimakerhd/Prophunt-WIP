@@ -130,66 +130,110 @@ concommand.Add("ph_taunt_menu", OpenPropTauntMenu)
 --
 -- Deliberately NOT using the stock "menu_player_model" console command - that
 -- just sets the cl_playermodel convar, which only takes effect on next spawn.
--- This builds its own grid (same model list GMod's own menu uses, via
--- player_manager.AllValidModels()) and applies the choice over the network
+-- This builds its own grid and applies the choice over the network
 -- immediately, live, with no respawn needed.
+--
+-- The model list combines TWO sources so both default GMod models and
+-- workshop-subscribed ones show up:
+--   1) player_manager.AllValidModels() - anything properly registered, which
+--      covers default GMod models and well-behaved workshop playermodel packs.
+--   2) A recursive filesystem scan of models/player/ - catches workshop packs
+--      that just drop .mdl files there without registering via player_manager.
+-- Both send the model's actual file path to the server (not a short name),
+-- since only a real path can be validated/used for packs from source (2).
 -- ===========================================================================
 
 local hunterModelMenu
 local hunterModelGrid
+local hunterModelList -- cached {path=, label=} list, built once per session
 
-local function ApplyHunterModel(modelKey)
+local function ApplyHunterModel(modelPath)
     net.Start("PH_SetHunterModel")
-        net.WriteString(modelKey)
+        net.WriteString(modelPath)
     net.SendToServer()
 end
 
-local function PopulateHunterModelGrid()
+local function BuildHunterModelList()
+    if hunterModelList then return hunterModelList end
+
+    local list = {}
+    local seen = {}
+
+    -- Source 1: officially registered models (default GMod + well-behaved addons)
+    local registered = player_manager.AllValidModels()
+    for niceName, modelPath in pairs(registered) do
+        if not seen[modelPath] then
+            seen[modelPath] = true
+            table.insert(list, {path = modelPath, label = niceName})
+        end
+    end
+
+    -- Source 2: recursive scan for any other .mdl under models/player/ that
+    -- wasn't already registered - covers workshop packs that skip registration.
+    local function scan(path)
+        local files, dirs = file.Find(path .. "*", "GAME")
+        for _, f in ipairs(files) do
+            if string.EndsWith(string.lower(f), ".mdl") then
+                local fullPath = path .. f
+                if not seen[fullPath] then
+                    seen[fullPath] = true
+                    table.insert(list, {path = fullPath, label = string.StripExtension(f)})
+                end
+            end
+        end
+        for _, d in ipairs(dirs) do
+            scan(path .. d .. "/")
+        end
+    end
+    scan("models/player/")
+
+    table.sort(list, function(a, b) return string.lower(a.label) < string.lower(b.label) end)
+
+    hunterModelList = list
+    return list
+end
+
+local function PopulateHunterModelGrid(filterText)
     if not IsValid(hunterModelGrid) then return end
     hunterModelGrid:Clear()
 
     local ply = LocalPlayer()
-    local currentKey = IsValid(ply) and ply:GetNWString("PH_HunterModel", "combine") or "combine"
+    local currentPath = IsValid(ply) and ply:GetNWString("PH_HunterModel", "") or ""
 
-    local models = player_manager.AllValidModels()
-    local keys = {}
-    for key in pairs(models) do
-        table.insert(keys, key)
-    end
-    table.sort(keys)
+    filterText = filterText and string.lower(string.Trim(filterText)) or ""
 
-    for _, key in ipairs(keys) do
-        local modelPath = models[key]
-
-        local holder = vgui.Create("DPanel", hunterModelGrid)
-        holder:SetSize(88, 108)
-        holder.Paint = function(self, w, h)
-            if key == currentKey then
-                draw.RoundedBox(6, 0, 0, w, h, Color(95, 155, 255, 90))
+    for _, entry in ipairs(BuildHunterModelList()) do
+        if filterText == "" or string.find(string.lower(entry.label), filterText, 1, true) then
+            local holder = vgui.Create("DPanel", hunterModelGrid)
+            holder:SetSize(88, 108)
+            holder.Paint = function(self, w, h)
+                if entry.path == currentPath then
+                    draw.RoundedBox(6, 0, 0, w, h, Color(95, 155, 255, 90))
+                end
             end
-        end
 
-        local icon = vgui.Create("SpawnIcon", holder)
-        icon:SetPos(2, 2)
-        icon:SetSize(84, 84)
-        icon:SetModel(modelPath)
-        icon:SetTooltip(key == currentKey and (key .. " (current)") or key)
+            local icon = vgui.Create("SpawnIcon", holder)
+            icon:SetPos(2, 2)
+            icon:SetSize(84, 84)
+            icon:SetModel(entry.path)
+            icon:SetTooltip(entry.path == currentPath and (entry.label .. " (current)") or entry.label)
 
-        icon.DoClick = function()
-            ApplyHunterModel(key)
-            currentKey = key
-            if IsValid(hunterModelMenu) then
-                hunterModelMenu:Close()
+            icon.DoClick = function()
+                ApplyHunterModel(entry.path)
+                currentPath = entry.path
+                if IsValid(hunterModelMenu) then
+                    hunterModelMenu:Close()
+                end
             end
-        end
 
-        local label = vgui.Create("DLabel", holder)
-        label:SetPos(0, 88)
-        label:SetSize(88, 18)
-        label:SetContentAlignment(5)
-        label:SetFont("DermaDefault")
-        label:SetTextColor(Color(220, 220, 220, 255))
-        label:SetText(key)
+            local label = vgui.Create("DLabel", holder)
+            label:SetPos(0, 88)
+            label:SetSize(88, 18)
+            label:SetContentAlignment(5)
+            label:SetFont("DermaDefault")
+            label:SetTextColor(Color(220, 220, 220, 255))
+            label:SetText(entry.label)
+        end
     end
 end
 
@@ -198,13 +242,22 @@ local function OpenHunterModelMenu()
     if not IsValid(ply) or ply:Team() ~= TEAM_HUNTERS then return end
     if not GetGlobalBool("InRound", false) then return end
 
+    -- Blinded hunters can't see anyway, and opening this while the camera is
+    -- parked out in the void (see GM:CalcView in cl_init.lua) causes the
+    -- SpawnIcon render-target previews to bleed a leftover colour into the
+    -- screen instead of the expected blackness. Simplest fix: don't allow it.
+    if blind then
+        ply:ChatPrint("You can't change your model while blinded.")
+        return
+    end
+
     if IsValid(hunterModelMenu) then
         hunterModelMenu:Close()
     end
 
     hunterModelMenu = vgui.Create("DFrame")
     hunterModelMenu:SetTitle("")
-    hunterModelMenu:SetSize(620, 480)
+    hunterModelMenu:SetSize(640, 520)
     hunterModelMenu:Center()
     hunterModelMenu:MakePopup()
     hunterModelMenu:SetDraggable(false)
@@ -219,16 +272,26 @@ local function OpenHunterModelMenu()
         draw.SimpleText("Applies immediately - no need to respawn.", "DermaDefault", 20, 44, Color(200, 200, 200, 180), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
     end
 
+    local search = vgui.Create("DTextEntry", hunterModelMenu)
+    search:Dock(TOP)
+    search:DockMargin(10, 82, 10, 8)
+    search:SetTall(26)
+    search:SetPlaceholderText("Search models...")
+
     local scroll = vgui.Create("DScrollPanel", hunterModelMenu)
     scroll:Dock(FILL)
-    scroll:DockMargin(10, 82, 10, 10)
+    scroll:DockMargin(10, 0, 10, 10)
 
     hunterModelGrid = vgui.Create("DIconLayout", scroll)
     hunterModelGrid:Dock(FILL)
     hunterModelGrid:SetSpaceY(6)
     hunterModelGrid:SetSpaceX(6)
 
-    PopulateHunterModelGrid()
+    search.OnValueChange = function(self, val)
+        PopulateHunterModelGrid(val)
+    end
+
+    PopulateHunterModelGrid("")
 end
 
 concommand.Add("ph_hunter_model_menu", OpenHunterModelMenu)
