@@ -2,7 +2,7 @@
 
 ## 🐛 Known Issues
 
-* **Hunter Playermodel Menu:** A dedicated selection menu allowing players on the Hunter team to choose their preferred playermodel.
+* **Hunter Playermodel Menu:** menu isn't working, just showing the playermodels
 * **HUD/UI Overlap:** Certain HUD elements or UI menus are overlapping each other during gameplay.
 
 ---
