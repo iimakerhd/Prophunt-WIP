@@ -148,14 +148,14 @@ HUNTER_PLAYER_MODELS = {
 
 
 -- Folder (relative to sound/) that the Prop Taunt Menu [F4/F3] auto-scans for
--- .wav/.mp3/.ogg files - drop a new file in content/sound/taunts/props/ and it
--- shows up automatically, no code edits needed.
+-- .wav/.mp3/.ogg files - drop a new file in content/sound/prophunt_taunts/props/
+-- and it shows up automatically, no code edits needed.
 --
--- NOTE: file.Find(..., "GAME") searches every mounted addon's content merged
--- together, so if another installed addon also uses a "taunts/props" folder,
--- its files could show up here too. If that ever happens again, the fix is to
--- point this at an addon-unique folder name instead - ask before changing it.
-PROP_TAUNT_FOLDER = "taunts/props/"
+-- This folder name is unique to this addon on purpose - file.Find(..., "GAME")
+-- searches every mounted addon's content merged together, so a generic name like
+-- "taunts/props/" risks other addons' sounds leaking into this menu (this
+-- happened before - see git history). Keep this unique; ask before changing it.
+PROP_TAUNT_FOLDER = "prophunt_taunts/props/"
 
 
 -- Seconds a player has to wait before they can taunt again (Default: 2 or 3)
