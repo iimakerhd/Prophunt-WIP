@@ -138,13 +138,10 @@ PROP_TAUNTS = {
 }
 
 
--- Valid hunter playermodel selection options
-HUNTER_PLAYER_MODELS = {
-	"combine",
-	"combineprison",
-	"combineelite",
-	"police"
-}
+-- Hunters can now pick from every player model GMod registers via
+-- player_manager.AllValidModels() (F4 while on Hunters, or console command
+-- ph_hunter_model_menu) - selection applies live, no respawn needed. The old
+-- hardcoded 4-model list has been removed in favor of that full registry.
 
 
 -- Folder (relative to sound/) that the Prop Taunt Menu [F4/F3] auto-scans for
