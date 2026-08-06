@@ -50,6 +50,7 @@ util.AddNetworkString("PH_PlayTaunt")
 util.AddNetworkString("PH_RequestPropTaunts")
 util.AddNetworkString("PH_PropTauntList")
 util.AddNetworkString("PlayerKilledByPlayer")
+util.AddNetworkString("PH_SetHunterModel")
 net.Receive("PH_RotateProp", function(len, pl)
 	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
 	if pl:GetNWBool("PH_RotateLocked", false) then return end
@@ -107,6 +108,61 @@ net.Receive("PH_RequestPropTaunts", function(len, pl)
 	net.Send(pl)
 end)
 
+-- Rebuilds a player's first-person view hands to match a given player model key
+-- (from player_manager.AllValidModels()). Shared between initial spawn and a live
+-- hunter model change so the hands never end up mismatched with the body model.
+local function UTIL_RefreshPlayerHands(pl, modelKey)
+	local oldhands = pl:GetHands()
+	if ( IsValid( oldhands ) ) then oldhands:Remove() end
+
+	local hands = ents.Create( "gmod_hands" )
+	if ( IsValid( hands ) ) then
+		pl:SetHands( hands )
+		hands:SetOwner( pl )
+
+		local handsKey = modelKey or pl:GetInfo( "cl_playermodel" )
+		local info = player_manager.TranslatePlayerHands( handsKey )
+		if ( info ) then
+			hands:SetModel( info.model )
+			hands:SetSkin( info.skin )
+			hands:SetBodyGroups( info.body )
+		end
+
+		-- Attach them to the viewmodel
+		local vm = pl:GetViewModel( 0 )
+		hands:AttachToViewmodel( vm )
+
+		vm:DeleteOnRemove( hands )
+		pl:DeleteOnRemove( hands )
+
+		hands:Spawn()
+	end
+end
+
+-- Applies a hunter player model immediately, live, with no respawn required:
+-- updates the visible body model, the networked key (so it persists across
+-- spawns/rounds and matches on reconnect), and the first-person hands to match.
+local function UTIL_ApplyHunterModel(pl, modelKey)
+	local models = player_manager.AllValidModels()
+	local modelPath = models[modelKey]
+	if !modelPath then return false end
+
+	pl:SetNWString("PH_HunterModel", modelKey)
+	util.PrecacheModel(modelPath)
+	pl:SetModel(modelPath)
+	UTIL_RefreshPlayerHands(pl, modelKey)
+	return true
+end
+
+net.Receive("PH_SetHunterModel", function(len, pl)
+	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_HUNTERS then return end
+
+	local modelKey = net.ReadString()
+	if !modelKey or modelKey == "" then return end
+
+	UTIL_ApplyHunterModel(pl, modelKey)
+end)
+
 -- Called alot
 function GM:CheckPlayerDeathRoundEnd()
 	if !GAMEMODE.RoundBased || !GAMEMODE:InRound() then 
@@ -152,34 +208,15 @@ function GM:PlayerCanPickupWeapon(pl, ent)
 	return true
 end
 
--- Make a variable for custom 3 combines.
-local playerModels = {}
-local function addModel(model)
-	local t = {}
-	t.model = model
-	table.insert(playerModels, t)
-end
-
--- delivered from stock Gmod's player manager
-addModel("combine")
-addModel("combineprison")
-addModel("combineelite")
-addModel("police")
-
 function GM:PlayerSetModel(pl)
 	-- set antlion gib small for Prop model. Do not change into others because this might purposed as a hitbox.
 	local player_model = "models/Gibs/Antlion_gib_small_3.mdl"
 
-	-- set 3 combine models based cl_playermodel info.
-	local selectedModel = pl:GetNWString("PH_HunterModel", "combine")
-	local cl_playermodel = selectedModel
-	-- translate it
-	local modelname = player_manager.TranslatePlayerModel( cl_playermodel )
-	
-	-- for Hunter only
-    if pl:Team() == TEAM_HUNTERS then
-				player_model = modelname
-    end
+	if pl:Team() == TEAM_HUNTERS then
+		local models = player_manager.AllValidModels()
+		local selectedKey = pl:GetNWString("PH_HunterModel", "combine")
+		player_model = models[selectedKey] or models["combine"] or "models/police.mdl"
+	end
 	
 	-- Precache it
 	util.PrecacheModel(player_model)
@@ -346,32 +383,11 @@ end)
 -- Called when the players spawns
 function PlayerSpawn(pl)
 
-	local oldhands = pl:GetHands()
-	if ( IsValid( oldhands ) ) then oldhands:Remove() end
-
-	local hands = ents.Create( "gmod_hands" )
-	if ( IsValid( hands ) ) then
-		pl:SetHands( hands )
-		hands:SetOwner( pl )
-
-		-- Which hands should we use?
-		local cl_playermodel = pl:GetInfo( "cl_playermodel" )
-		local info = player_manager.TranslatePlayerHands( cl_playermodel )
-		if ( info ) then
-			hands:SetModel( info.model )
-			hands:SetSkin( info.skin )
-			hands:SetBodyGroups( info.body )
-		end
-
-		-- Attach them to the viewmodel
-		local vm = pl:GetViewModel( 0 )
-		hands:AttachToViewmodel( vm )
-
-		vm:DeleteOnRemove( hands )
-		pl:DeleteOnRemove( hands )
-
-		hands:Spawn()
- 	end
+	local handsKey = nil
+	if pl:Team() == TEAM_HUNTERS then
+		handsKey = pl:GetNWString("PH_HunterModel", "combine")
+	end
+	UTIL_RefreshPlayerHands(pl, handsKey)
 
 	pl:Blind(false)
 	pl:RemoveProp()
