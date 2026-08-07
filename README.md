@@ -3,6 +3,7 @@
 ## 🐛 Known Issues
 
 * **HUD/UI Overlap:** Certain HUD elements or UI menus are overlapping each other during gameplay.
+* **Hitbox:** shooting with normal weapons doesn't register or deal any damage. 
 
 ---
 
