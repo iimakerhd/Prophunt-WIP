@@ -2,7 +2,6 @@
 
 ## 🐛 Known Issues
 
-* **Hunter Playermodel Menu:** menu isn't working, just showing the playermodels
 * **HUD/UI Overlap:** Certain HUD elements or UI menus are overlapping each other during gameplay.
 
 ---
