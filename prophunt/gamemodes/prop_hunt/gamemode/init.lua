@@ -439,8 +439,6 @@ function PlayerSpawn(pl)
 	
 	umsg.Start("ResetHull", pl)
 	umsg.End()
-	
-	pl:SetCollisionGroup(COLLISION_GROUP_PASSABLE_DOOR)
 end
 hook.Add("PlayerSpawn", "PH_PlayerSpawn", PlayerSpawn)
 
