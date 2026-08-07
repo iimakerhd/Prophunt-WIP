@@ -304,7 +304,20 @@ function GM:PlayerUse(pl, ent)
 			pl.ph_prop.max_health = ent_health
 			pl.ph_prop:SetModel(ent:GetModel())
 			pl.ph_prop:SetSkin(ent:GetSkin())
-			pl.ph_prop:SetNotSolid(true)
+
+			-- Solid + hittable by bullet traces (COLLISION_GROUP_WEAPON so it still
+			-- doesn't physically block player movement, same idea as a dropped gun
+			-- not blocking foot traffic). Previously SetNotSolid(true) here meant
+			-- hitscan bullets could NEVER hit this entity - the only thing that took
+			-- damage was the real (invisible) player underneath, whose hitboxes come
+			-- from a tiny fixed antlion gib model with no relation to the disguise's
+			-- actual size/shape. Now the thing you actually see and aim at is what
+			-- registers the hit, matching ph_prop's existing OnTakeDamage/kill logic.
+			pl.ph_prop:SetSolid(SOLID_BBOX)
+			pl.ph_prop:SetCollisionBounds(obbmins, obbmaxs)
+			pl.ph_prop:SetCollisionGroup(COLLISION_GROUP_WEAPON)
+			pl.ph_prop:SetMoveType(MOVETYPE_NONE)
+
 			local propMinZ = pl.ph_prop:OBBMins().z
 			if propMinZ > 0 then propMinZ = 0 end
 			local targetPos = pl:GetPos() - Vector(0, 0, propMinZ)
