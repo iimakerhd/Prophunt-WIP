@@ -11,6 +11,19 @@ include("shared.lua")
 function ENT:Initialize()
 	self:SetModel("models/player/Kleiner.mdl")
 	self.health = 100
+
+	-- Solid + hittable by bullet traces, but COLLISION_GROUP_WEAPON means it
+	-- won't physically block player movement (same as a dropped weapon on the
+	-- ground), and MOVETYPE_NONE keeps it out of the physics simulation since
+	-- its position is driven manually every tick (see PH_UpdatePropPosition in
+	-- gamemode/init.lua) rather than by vphysics. This entity previously used
+	-- SetNotSolid(true), which meant hitscan bullets could never register a hit
+	-- on it at all - only explosive/radius damage (grenades, rockets) worked,
+	-- since that doesn't rely on a trace actually hitting a solid entity.
+	self:SetSolid(SOLID_BBOX)
+	self:SetCollisionBounds(self:OBBMins(), self:OBBMaxs())
+	self:SetCollisionGroup(COLLISION_GROUP_WEAPON)
+	self:SetMoveType(MOVETYPE_NONE)
 end 
 
 
