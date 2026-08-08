@@ -305,19 +305,27 @@ function GM:PlayerUse(pl, ent)
 			pl.ph_prop:SetModel(ent:GetModel())
 			pl.ph_prop:SetSkin(ent:GetSkin())
 
-			-- Solid + hittable by bullet traces (COLLISION_GROUP_WEAPON so it still
-			-- doesn't physically block player movement, same idea as a dropped gun
-			-- not blocking foot traffic). SOLID_OBB_YAW (not SOLID_BBOX!) matters
-			-- here: SOLID_BBOX is a fixed axis-aligned box that does NOT rotate with
-			-- the entity's angle, so once a prop got rotated (either the "stand
-			-- upright" facing fix, or the player-controlled hold-R rotation), the
-			-- visible mesh would turn but the invisible collision box stayed frozen
-			-- at its original orientation - shots at the visible model would miss
-			-- the misaligned hitbox entirely. SOLID_OBB_YAW rotates with yaw, which
-			-- matches these props exactly (always upright, yaw-only rotation).
+			-- Solid + hittable by bullet traces. COLLISION_GROUP_NONE (the same
+			-- group an ordinary shootable world prop uses) rather than a "special"
+			-- collision group - PASSABLE_DOOR and WEAPON were both tried here
+			-- previously and neither could be confirmed safe against every weapon/
+			-- trace type; some collision groups are specifically defined to be
+			-- invisible to damage traces, not just physics push resolution. Not
+			-- physically blocking player movement is instead handled entirely via
+			-- GM:ShouldCollide in sh_player.lua, which only affects physics
+			-- collision response, never trace-based hit detection.
+			--
+			-- SOLID_OBB_YAW (not SOLID_BBOX!) matters here too: SOLID_BBOX is a
+			-- fixed axis-aligned box that does NOT rotate with the entity's angle,
+			-- so once a prop got rotated (either the "stand upright" facing fix,
+			-- or the player-controlled hold-R rotation), the visible mesh would
+			-- turn but the invisible collision box stayed frozen at its original
+			-- orientation - shots at the visible model would miss the misaligned
+			-- hitbox entirely. SOLID_OBB_YAW rotates with yaw, which matches these
+			-- props exactly (always upright, yaw-only rotation).
 			pl.ph_prop:SetSolid(SOLID_OBB_YAW)
 			pl.ph_prop:SetCollisionBounds(obbmins, obbmaxs)
-			pl.ph_prop:SetCollisionGroup(COLLISION_GROUP_WEAPON)
+			pl.ph_prop:SetCollisionGroup(COLLISION_GROUP_NONE)
 			pl.ph_prop:SetMoveType(MOVETYPE_NONE)
 
 			local propMinZ = pl.ph_prop:OBBMins().z
