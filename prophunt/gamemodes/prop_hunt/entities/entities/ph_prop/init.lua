@@ -12,11 +12,7 @@ function ENT:Initialize()
 	self:SetModel("models/player/Kleiner.mdl")
 	self.health = 100
 
-	-- Solid + hittable by bullet traces, but COLLISION_GROUP_WEAPON means it
-	-- won't physically block player movement (same as a dropped weapon on the
-	-- ground), and MOVETYPE_NONE keeps it out of the physics simulation since
-	-- its position is driven manually every tick (see PH_UpdatePropPosition in
-	-- gamemode/init.lua) rather than by vphysics. This entity previously used
+	-- Solid + hittable by bullet traces. This entity previously used
 	-- SetNotSolid(true), which meant hitscan bullets could never register a hit
 	-- on it at all - only explosive/radius damage (grenades, rockets) worked,
 	-- since that doesn't rely on a trace actually hitting a solid entity.
@@ -26,9 +22,18 @@ function ENT:Initialize()
 	-- visible mesh and its actual (frozen, unrotated) collision box would drift
 	-- apart, making shots at the visible model miss. SOLID_OBB_YAW rotates with
 	-- yaw, matching these props (always upright, yaw-only rotation).
+	--
+	-- COLLISION_GROUP_NONE (not WEAPON/PASSABLE_DOOR) matters too: several
+	-- "special" collision groups are specifically defined to be invisible to
+	-- weapon damage traces, not just physics push resolution - two were already
+	-- tried here and silently broke bullet hit registration. NONE is the same
+	-- group an ordinary shootable world prop uses, so it's unambiguously
+	-- hittable by everything. "Don't physically block player movement" is
+	-- instead handled entirely via GM:ShouldCollide in sh_player.lua, which only
+	-- affects physics collision response, never trace-based hit detection.
 	self:SetSolid(SOLID_OBB_YAW)
 	self:SetCollisionBounds(self:OBBMins(), self:OBBMaxs())
-	self:SetCollisionGroup(COLLISION_GROUP_WEAPON)
+	self:SetCollisionGroup(COLLISION_GROUP_NONE)
 	self:SetMoveType(MOVETYPE_NONE)
 end 
 
