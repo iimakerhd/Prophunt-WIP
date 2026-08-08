@@ -25,8 +25,11 @@ function CLASS:OnSpawn(pl)
 	pl.ph_prop:SetPos(pl:GetPos())
 	pl.ph_prop:SetAngles(pl:GetAngles())
 	pl.ph_prop:Spawn()
-	pl.ph_prop:SetNotSolid(true)
-	pl.ph_prop:SetMoveType(MOVETYPE_NONE)
+	-- Solid/collision-group/movetype are already set correctly by ENT:Initialize
+	-- (ph_prop/init.lua) - don't touch them here. This used to call
+	-- SetNotSolid(true) immediately after Spawn(), which silently re-undid
+	-- Initialize's solid setup right at creation time, right back to being
+	-- unhittable by bullet traces.
 	pl.ph_prop:SetOwner(pl)
 
 	local propMinZ = pl.ph_prop:OBBMins().z
