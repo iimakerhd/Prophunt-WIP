@@ -20,7 +20,13 @@ function ENT:Initialize()
 	-- SetNotSolid(true), which meant hitscan bullets could never register a hit
 	-- on it at all - only explosive/radius damage (grenades, rockets) worked,
 	-- since that doesn't rely on a trace actually hitting a solid entity.
-	self:SetSolid(SOLID_BBOX)
+	--
+	-- SOLID_OBB_YAW (not SOLID_BBOX) matters: SOLID_BBOX is a fixed axis-aligned
+	-- box that does NOT rotate with the entity's angle, so a rotated prop's
+	-- visible mesh and its actual (frozen, unrotated) collision box would drift
+	-- apart, making shots at the visible model miss. SOLID_OBB_YAW rotates with
+	-- yaw, matching these props (always upright, yaw-only rotation).
+	self:SetSolid(SOLID_OBB_YAW)
 	self:SetCollisionBounds(self:OBBMins(), self:OBBMaxs())
 	self:SetCollisionGroup(COLLISION_GROUP_WEAPON)
 	self:SetMoveType(MOVETYPE_NONE)
