@@ -307,13 +307,15 @@ function GM:PlayerUse(pl, ent)
 
 			-- Solid + hittable by bullet traces (COLLISION_GROUP_WEAPON so it still
 			-- doesn't physically block player movement, same idea as a dropped gun
-			-- not blocking foot traffic). Previously SetNotSolid(true) here meant
-			-- hitscan bullets could NEVER hit this entity - the only thing that took
-			-- damage was the real (invisible) player underneath, whose hitboxes come
-			-- from a tiny fixed antlion gib model with no relation to the disguise's
-			-- actual size/shape. Now the thing you actually see and aim at is what
-			-- registers the hit, matching ph_prop's existing OnTakeDamage/kill logic.
-			pl.ph_prop:SetSolid(SOLID_BBOX)
+			-- not blocking foot traffic). SOLID_OBB_YAW (not SOLID_BBOX!) matters
+			-- here: SOLID_BBOX is a fixed axis-aligned box that does NOT rotate with
+			-- the entity's angle, so once a prop got rotated (either the "stand
+			-- upright" facing fix, or the player-controlled hold-R rotation), the
+			-- visible mesh would turn but the invisible collision box stayed frozen
+			-- at its original orientation - shots at the visible model would miss
+			-- the misaligned hitbox entirely. SOLID_OBB_YAW rotates with yaw, which
+			-- matches these props exactly (always upright, yaw-only rotation).
+			pl.ph_prop:SetSolid(SOLID_OBB_YAW)
 			pl.ph_prop:SetCollisionBounds(obbmins, obbmaxs)
 			pl.ph_prop:SetCollisionGroup(COLLISION_GROUP_WEAPON)
 			pl.ph_prop:SetMoveType(MOVETYPE_NONE)
