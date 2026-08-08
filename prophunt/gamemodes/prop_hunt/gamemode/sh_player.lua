@@ -32,19 +32,28 @@ function meta:RemoveProp()
 end
 
 
--- Players shouldn't physically shove each other around (a hunter walking into a
--- hiding prop, or two props overlapping, shouldn't push either one out of place),
--- but this MUST be done via GM:ShouldCollide rather than SetCollisionGroup. An
--- earlier version used pl:SetCollisionGroup(COLLISION_GROUP_PASSABLE_DOOR) for
--- this - that group is meant for doors mid-swing so gunfire isn't blocked by an
--- opening door, and it has the side effect of making hitscan bullet traces pass
--- straight through the entity entirely. That meant hunters' bullets never
--- registered damage on props at all, while explosives (grenades/rockets) still
--- worked since blast/radius damage doesn't use the same trace-based hit check.
--- ShouldCollide only affects physics collision resolution, not bullet traces, so
--- it gets the "walk through each other" behaviour without breaking gunfire.
+-- Neither players nor disguised props should physically shove each other around
+-- (a hunter walking into a hiding prop shouldn't push it out of place), but this
+-- MUST be done via GM:ShouldCollide rather than SetCollisionGroup. Two collision
+-- group choices were already tried and rejected here for the same underlying
+-- reason - some collision groups are specifically defined to be invisible to
+-- weapon damage traces, not just physics push resolution, which silently broke
+-- bullet hit registration on ph_prop entirely:
+--   - COLLISION_GROUP_PASSABLE_DOOR: meant for doors mid-swing so gunfire isn't
+--     blocked by an opening door - exempts the entity from hitscan traces too.
+--   - COLLISION_GROUP_WEAPON: meant for dropped weapons not blocking foot
+--     traffic - could not be confirmed safe against every weapon/trace type.
+-- ph_prop now uses COLLISION_GROUP_NONE (the same group as an ordinary shootable
+-- world prop - guaranteed hittable by anything), and "walk through it" is
+-- achieved purely through ShouldCollide below, which only affects physics
+-- collision RESPONSE (pushing/blocking), never bullet trace hit DETECTION.
 hook.Add("ShouldCollide", "PH_PlayersDontPhysicallyCollide", function(ent1, ent2)
 	if ent1:IsPlayer() and ent2:IsPlayer() then
+		return false
+	end
+
+	if (ent1:IsPlayer() and IsValid(ent2) and ent2:GetClass() == "ph_prop")
+	or (ent2:IsPlayer() and IsValid(ent1) and ent1:GetClass() == "ph_prop") then
 		return false
 	end
 end)
