@@ -323,10 +323,19 @@ function GM:PlayerUse(pl, ent)
 			-- orientation - shots at the visible model would miss the misaligned
 			-- hitbox entirely. SOLID_OBB_YAW rotates with yaw, which matches these
 			-- props exactly (always upright, yaw-only rotation).
-			pl.ph_prop:SetSolid(SOLID_OBB_YAW)
+			--
+			-- IMPORTANT: SetCollisionBounds() on a solid type other than
+			-- SOLID_VPHYSICS does not reliably force the engine to recompute the
+			-- collision shape actually used by traces on a LIVE entity - without
+			-- calling Activate() afterward, the entity kept using whatever bounds
+			-- were set at creation (the small default placeholder hull) even after
+			-- SetCollisionBounds was called again here with the new prop's real
+			-- size, so the hitbox stayed feet-sized no matter what was picked up.
 			pl.ph_prop:SetCollisionBounds(obbmins, obbmaxs)
+			pl.ph_prop:SetSolid(SOLID_OBB_YAW)
 			pl.ph_prop:SetCollisionGroup(COLLISION_GROUP_NONE)
 			pl.ph_prop:SetMoveType(MOVETYPE_NONE)
+			pl.ph_prop:Activate()
 
 			local propMinZ = pl.ph_prop:OBBMins().z
 			if propMinZ > 0 then propMinZ = 0 end
