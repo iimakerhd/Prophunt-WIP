@@ -31,8 +31,7 @@ function ENT:Initialize()
 	-- hittable by everything. "Don't physically block player movement" is
 	-- instead handled entirely via GM:ShouldCollide in sh_player.lua, which only
 	-- affects physics collision response, never trace-based hit detection.
-	self:SetSolid(SOLID_OBB_YAW)
-
+	--
 	-- IMPORTANT: don't call self:OBBMins()/OBBMaxs() here to size the collision
 	-- bounds. Right after SetModel(), on the very same tick the entity was just
 	-- created, the model's bounding-box data isn't reliably available yet - this
@@ -46,8 +45,16 @@ function ENT:Initialize()
 	-- that prop's actual model instead - that path is safe from this same race
 	-- since it reads bounds from an existing, long-since-spawned world prop.
 	self:SetCollisionBounds(Vector(-16, -16, 0), Vector(16, 16, 72))
+	self:SetSolid(SOLID_OBB_YAW)
 	self:SetCollisionGroup(COLLISION_GROUP_NONE)
 	self:SetMoveType(MOVETYPE_NONE)
+
+	-- Required after SetCollisionBounds for non-SOLID_VPHYSICS solid types to
+	-- actually take effect on the traces/collision used to detect hits - without
+	-- this, GM:PlayerUse's later SetCollisionBounds call (when a real prop is
+	-- picked up) was silently ignored and the hitbox stayed stuck at whatever
+	-- was set here at creation, regardless of what prop was actually chosen.
+	self:Activate()
 end 
 
 
