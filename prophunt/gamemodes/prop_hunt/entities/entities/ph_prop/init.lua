@@ -32,7 +32,20 @@ function ENT:Initialize()
 	-- instead handled entirely via GM:ShouldCollide in sh_player.lua, which only
 	-- affects physics collision response, never trace-based hit detection.
 	self:SetSolid(SOLID_OBB_YAW)
-	self:SetCollisionBounds(self:OBBMins(), self:OBBMaxs())
+
+	-- IMPORTANT: don't call self:OBBMins()/OBBMaxs() here to size the collision
+	-- bounds. Right after SetModel(), on the very same tick the entity was just
+	-- created, the model's bounding-box data isn't reliably available yet - this
+	-- can silently return a near-zero-size box, which is nearly impossible to
+	-- actually hit (only very close to the entity's origin - the feet, for a
+	-- player-style model - would ever graze it, and even that isn't a real hit
+	-- against a meaningful volume). A hardcoded standard humanoid hull avoids
+	-- that race entirely and is accurate for this default Kleiner placeholder
+	-- body (used before a player picks their first real prop). Once a real prop
+	-- is grabbed, GM:PlayerUse (gamemode/init.lua) sets proper bounds sized to
+	-- that prop's actual model instead - that path is safe from this same race
+	-- since it reads bounds from an existing, long-since-spawned world prop.
+	self:SetCollisionBounds(Vector(-16, -16, 0), Vector(16, 16, 72))
 	self:SetCollisionGroup(COLLISION_GROUP_NONE)
 	self:SetMoveType(MOVETYPE_NONE)
 end 
