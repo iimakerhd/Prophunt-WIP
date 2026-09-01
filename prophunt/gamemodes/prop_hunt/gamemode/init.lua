@@ -4,6 +4,7 @@ AddCSLuaFile("cl_prop_taunts.lua")
 AddCSLuaFile("sh_config.lua")
 AddCSLuaFile("sh_init.lua")
 AddCSLuaFile("sh_player.lua")
+AddCSLuaFile("sh_wallclimb.lua")
 
 
 -- If there is a mapfile send it to the client (sometimes servers want to change settings for certain maps)
@@ -441,9 +442,25 @@ hook.Add("PlayerTick", "PH_UpdatePropPosition", function(pl, mv)
 	if !IsValid(pl) or pl:Team() != TEAM_PROPS or !pl:Alive() then return end
 	if !pl.ph_prop or !IsValid(pl.ph_prop) then return end
 
-	local z = pl.ph_prop:OBBMins().z
-	if z > 0 then z = 0 end
-	pl.ph_prop:SetPos(pl:GetPos() - Vector(0, 0, z))
+	if pl.WallSticking and pl.WallNormal then
+		-- Flush-mount the disguised prop against the wall it's stuck to: push
+		-- it out along the wall's normal by roughly the prop's own depth (so
+		-- it sits on the wall surface rather than clipping through it), and
+		-- orient it so its "up" faces away from the wall (lying flush against
+		-- it, like a wall-mounted decoration).
+		local normal = pl.WallNormal
+		local mins = pl.ph_prop:OBBMins()
+		local maxs = pl.ph_prop:OBBMaxs()
+		local depth = math.max(math.abs(mins.x), math.abs(maxs.x), math.abs(mins.y), math.abs(maxs.y))
+		pl.ph_prop:SetPos(pl:GetPos() + normal * depth)
+
+		local ang = normal:Angle()
+		pl.ph_prop:SetAngles(Angle(ang.p - 90, ang.y, 0))
+	else
+		local z = pl.ph_prop:OBBMins().z
+		if z > 0 then z = 0 end
+		pl.ph_prop:SetPos(pl:GetPos() - Vector(0, 0, z))
+	end
 end)
 
 
