@@ -1,6 +1,7 @@
 -- Include the required lua files
 include("sh_config.lua")
 include("sh_player.lua")
+include("sh_wallclimb.lua")
 
 
 -- Include the configuration for this map
@@ -28,7 +29,8 @@ As a Prop you have ]]..HUNTER_BLINDLOCK_TIME..[[ seconds to replicate an existin
 As a Hunter you will be blindfolded for the first ]]..HUNTER_BLINDLOCK_TIME..[[ seconds of the round while the Props hide. When your blindfold is taken off, you will need to find props controlled by players and kill them. Damaging non-player props will lower your health significantly. However, killing a Prop will increase your health by ]]..HUNTER_KILL_BONUS..[[ points.
 
 Both teams can press [F3] to play a taunt sound.
-As a Prop, hold [R] and move the mouse to rotate your selected prop while hiding.]]
+As a Prop, hold [R] and move the mouse to rotate your selected prop while hiding.
+As a Prop, hold [Space] while looking at a nearby wall to stick to it and hide flush against it - release to drop back down.]]
 
 
 -- Fretta configuration
