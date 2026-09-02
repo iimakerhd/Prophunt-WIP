@@ -69,6 +69,12 @@ function HUDPaint()
 			else
 				draw.DrawText("Rotation unlocked: hold [R] to rotate.", "MyFont", 20, 80, Color(100, 255, 100, 255), TEXT_ALIGN_LEFT)
 			end
+
+			if lp:GetNWBool("PH_WallSticking", false) then
+				draw.DrawText("Stuck to the wall - release [Space] to drop.", "MyFont", 20, 100, Color(100, 200, 255, 255), TEXT_ALIGN_LEFT)
+			else
+				draw.DrawText("Hold [Space] near a wall to climb and stick to it.", "MyFont", 20, 100, Color(255, 255, 255, 255), TEXT_ALIGN_LEFT)
+			end
 		end
 	end
 end
