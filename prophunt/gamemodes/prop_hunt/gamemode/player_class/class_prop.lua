@@ -62,6 +62,12 @@ function CLASS:OnSpawn(pl)
 	-- (gamemode/cl_init.lua) can show the count without a round trip.
 	pl.ph_decoy_charges = DECOY_CHARGES_PER_LIFE
 	pl:SetNWInt("PH_DecoyCharges", DECOY_CHARGES_PER_LIFE)
+
+	-- Same per-life refill pattern for the liquid trail power-up.
+	pl.ph_liquid_charges = LIQUID_TRAIL_CHARGES_PER_LIFE
+	pl:SetNWInt("PH_LiquidCharges", LIQUID_TRAIL_CHARGES_PER_LIFE)
+	pl.ph_liquid_trail_active = false
+	pl:SetNWFloat("PH_LiquidTrailEndTime", 0)
 end
 
 if CLIENT then
@@ -120,6 +126,7 @@ end
 function CLASS:OnDeath(pl, attacker, dmginfo)
 	pl:RemoveProp()
 	pl:RemoveDecoy()
+	pl:StopLiquidTrail()
 end
 
 
