@@ -62,26 +62,59 @@ function meta:StopLiquidTrail()
 end
 
 
+-- Reference-counted freeze (meta:Lock()/UnLock()). More than one movement-
+-- freezing effect can now land on the same Hunter at once (ragdoll from a
+-- liquid trail AND a stun from a shockwave, potentially overlapping) - a
+-- plain Lock()/UnLock() pair per-effect would unlock them the moment
+-- whichever effect finishes FIRST, even if another is still meant to be
+-- holding them frozen. This tracks how many active effects want them locked
+-- and only actually calls UnLock() once that count returns to zero.
+--
+-- NOTE: this counter is independent of the raw pl.Lock(pl)/pl.UnLock(pl)
+-- calls class_hunter.lua makes directly for the round-start blindlock timer -
+-- that's a separate, earlier code path this doesn't hook into. In practice
+-- this isn't an issue since no shockwave/liquid trail can exist that early
+-- in a round (props are still hiding), but it's worth knowing if that ever
+-- changes.
+function meta:AddFreeze()
+	if CLIENT || !self:IsValid() then return end
+
+	self.ph_freeze_count = (self.ph_freeze_count or 0) + 1
+	if self.ph_freeze_count == 1 then
+		self:Lock()
+	end
+end
+
+function meta:RemoveFreeze()
+	if CLIENT || !self:IsValid() then return end
+
+	self.ph_freeze_count = math.max(0, (self.ph_freeze_count or 1) - 1)
+	if self.ph_freeze_count == 0 then
+		self:UnLock()
+	end
+end
+
+
 -- Puts a Hunter into a temporary physics ragdoll for `duration` seconds.
 --
 -- IMPORTANT CAVEAT: this is an approximation, not true player-to-ragdoll
 -- possession. GMod has no built-in way to hand a live player's actual body
 -- over to physics simulation. What this does instead: freeze the real player
--- (meta:Lock(), same freeze already used for the round-start hunter blindlock)
--- and hide them (SetNoDraw), then spawn a SEPARATE prop_ragdoll using their
--- model at their current position/angles and give it a shove so it flops
--- believably. The player's own hitbox/collision stays exactly where they were
--- frozen - it does NOT follow the ragdoll around as it settles - and on
--- recovery the player is teleported to wherever the ragdoll ended up, so they
--- don't feel disconnected from what they just watched happen. Client view
--- during this is hijacked in gamemode/cl_init.lua (GM:CalcView) to hover over
--- the ragdoll rather than stay at the frozen, hidden real body.
+-- (meta:AddFreeze()) and hide them (SetNoDraw), then spawn a SEPARATE
+-- prop_ragdoll using their model at their current position/angles and give
+-- it a shove so it flops believably. The player's own hitbox/collision stays
+-- exactly where they were frozen - it does NOT follow the ragdoll around as
+-- it settles - and on recovery the player is teleported to wherever the
+-- ragdoll ended up, so they don't feel disconnected from what they just
+-- watched happen. Client view during this is hijacked in gamemode/cl_init.lua
+-- (GM:CalcView) to hover over the ragdoll rather than stay at the frozen,
+-- hidden real body.
 function meta:BecomeRagdoll(duration)
 	if CLIENT || !self:IsValid() || !self:Alive() then return end
 	if self.ph_ragdolled then return end -- already down, don't restack/duplicate
 
 	self.ph_ragdolled = true
-	self:Lock()
+	self:AddFreeze()
 	self:SetNoDraw(true)
 
 	local rag = ents.Create("prop_ragdoll")
@@ -128,9 +161,43 @@ function meta:ClearRagdoll()
 	self.ph_ragdolled = false
 	self.ph_ragdoll_ent = nil
 	self:SetNoDraw(false)
-	self:UnLock()
+	self:RemoveFreeze()
 	self:SetNWBool("PH_Ragdolled", false)
 	self:SetNWEntity("PH_RagdollEnt", NULL)
+end
+
+
+-- Stuns a Hunter for `duration` seconds: frozen in place via meta:AddFreeze(),
+-- but - unlike BecomeRagdoll() - never hidden and never given a stand-in
+-- ragdoll. They stay visible to others exactly as they were standing, and
+-- keep their own normal first-person view (just can't move or act). A purely
+-- client-side "STUNNED" overlay (gamemode/cl_init.lua, driven by the
+-- PH_Stunned NWBool) is the only visual difference for the stunned player.
+function meta:Stun(duration)
+	if CLIENT || !self:IsValid() || !self:Alive() then return end
+	if self.ph_stunned then return end -- already stunned - ignore a repeat hit rather than stacking/refreshing
+
+	self.ph_stunned = true
+	self:AddFreeze()
+	self:SetNWBool("PH_Stunned", true)
+
+	local victim = self
+	timer.Simple(duration, function()
+		if !IsValid(victim) then return end
+		victim:ClearStun()
+	end)
+end
+
+
+-- Restores a player from Stun(), early or after its timer expires. Safe to
+-- call even if the player was never stunned.
+function meta:ClearStun()
+	if CLIENT || !self:IsValid() then return end
+	if !self.ph_stunned then return end
+
+	self.ph_stunned = false
+	self:RemoveFreeze()
+	self:SetNWBool("PH_Stunned", false)
 end
 
 
