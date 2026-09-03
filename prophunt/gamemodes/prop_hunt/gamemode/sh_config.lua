@@ -68,6 +68,24 @@ LIQUID_TRAIL_SEGMENT_LIFETIME = 8
 LIQUID_TRAIL_RAGDOLL_TIME = 5
 
 
+-- Number of times a prop can trigger the shockwave power-up per life. Kept
+-- low (1) relative to decoy/liquid trail since, unlike the flashbang, it
+-- needs no line of sight - a wall doesn't protect a Hunter from it. (Default: 1)
+SHOCKWAVE_CHARGES_PER_LIFE = 1
+
+
+-- Radius (in units) a shockwave stuns Hunters within, centered on the prop's
+-- current position. No line-of-sight check - unlike FLASHBANG_RADIUS, a wall
+-- between the prop and a Hunter does NOT block it. (Default: 350)
+SHOCKWAVE_RADIUS = 350
+
+
+-- Seconds a Hunter is stunned (frozen in place, but NOT hidden/ragdolled -
+-- they stay visible and can still see normally, just can't move or act) when
+-- caught in a shockwave. (Default: 3)
+SHOCKWAVE_STUN_TIME = 3
+
+
 -- If you loose one of these will be played
 -- Set blank to disable
 
