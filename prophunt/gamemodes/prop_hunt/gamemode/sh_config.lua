@@ -46,6 +46,28 @@ FLASHBANG_RADIUS = 450
 FLASHBANG_DURATION = 4
 
 
+-- Number of times a prop can activate the liquid trail power-up per life (Default: 2)
+LIQUID_TRAIL_CHARGES_PER_LIFE = 2
+
+
+-- Seconds a single activation leaves a trail behind the prop as they move (Default: 6)
+LIQUID_TRAIL_ACTIVE_TIME = 6
+
+
+-- How often (in seconds) a new puddle segment drops while a trail is active (Default: 0.2)
+LIQUID_TRAIL_SEGMENT_INTERVAL = 0.2
+
+
+-- Seconds a single dropped puddle segment lasts before disappearing on its own (Default: 8)
+LIQUID_TRAIL_SEGMENT_LIFETIME = 8
+
+
+-- Seconds a Hunter is ragdolled for after stepping in a puddle segment.
+-- Movement is fully frozen for the whole duration - this is a hard
+-- incapacitation, unlike the flashbang which only affects view. (Default: 5)
+LIQUID_TRAIL_RAGDOLL_TIME = 5
+
+
 -- If you loose one of these will be played
 -- Set blank to disable
 
