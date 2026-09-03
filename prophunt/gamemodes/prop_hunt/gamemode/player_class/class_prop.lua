@@ -13,7 +13,13 @@ CLASS.DrawTeamRing			= false
 
 -- Called by spawn and sets loadout
 function CLASS:Loadout(pl)
-	-- Props don't get anything
+	pl:Give("weapon_ph_flashbang")
+
+	-- SetAmmo (not GiveAmmo) so a leftover partial charge count from a
+	-- previous life never carries over - always exactly
+	-- FLASHBANG_CHARGES_PER_LIFE at the start of a new life, same per-life
+	-- reset semantics as pl.ph_decoy_charges (sh_config.lua/class_prop.lua).
+	pl:SetAmmo(FLASHBANG_CHARGES_PER_LIFE, "PHFlashbang")
 end
 
 
