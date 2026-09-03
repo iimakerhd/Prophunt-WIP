@@ -52,6 +52,88 @@ function meta:RemoveDecoy()
 end
 
 
+-- Stops this player's active liquid trail (see PH_ActivateLiquidTrail in
+-- gamemode/init.lua), if they have one running. Safe to call unconditionally.
+function meta:StopLiquidTrail()
+	if CLIENT || !self:IsValid() then return end
+
+	timer.Remove("PH_LiquidTrail_" .. self:EntIndex())
+	self.ph_liquid_trail_active = false
+end
+
+
+-- Puts a Hunter into a temporary physics ragdoll for `duration` seconds.
+--
+-- IMPORTANT CAVEAT: this is an approximation, not true player-to-ragdoll
+-- possession. GMod has no built-in way to hand a live player's actual body
+-- over to physics simulation. What this does instead: freeze the real player
+-- (meta:Lock(), same freeze already used for the round-start hunter blindlock)
+-- and hide them (SetNoDraw), then spawn a SEPARATE prop_ragdoll using their
+-- model at their current position/angles and give it a shove so it flops
+-- believably. The player's own hitbox/collision stays exactly where they were
+-- frozen - it does NOT follow the ragdoll around as it settles - and on
+-- recovery the player is teleported to wherever the ragdoll ended up, so they
+-- don't feel disconnected from what they just watched happen. Client view
+-- during this is hijacked in gamemode/cl_init.lua (GM:CalcView) to hover over
+-- the ragdoll rather than stay at the frozen, hidden real body.
+function meta:BecomeRagdoll(duration)
+	if CLIENT || !self:IsValid() || !self:Alive() then return end
+	if self.ph_ragdolled then return end -- already down, don't restack/duplicate
+
+	self.ph_ragdolled = true
+	self:Lock()
+	self:SetNoDraw(true)
+
+	local rag = ents.Create("prop_ragdoll")
+	rag:SetModel(self:GetModel())
+	rag:SetPos(self:GetPos())
+	rag:SetAngles(self:GetAngles())
+	rag:Spawn()
+	rag:Activate()
+
+	local phys = rag:GetPhysicsObject()
+	if IsValid(phys) then
+		phys:SetVelocity(self:GetVelocity())
+	end
+
+	self.ph_ragdoll_ent = rag
+	self:SetNWBool("PH_Ragdolled", true)
+	self:SetNWEntity("PH_RagdollEnt", rag)
+
+	local victim = self
+	timer.Simple(duration, function()
+		if !IsValid(victim) then
+			if IsValid(rag) then rag:Remove() end
+			return
+		end
+
+		victim:ClearRagdoll()
+	end)
+end
+
+
+-- Restores a player from BecomeRagdoll(), early or after its timer expires.
+-- Safe to call even if the player was never ragdolled (used defensively on
+-- death/disconnect for both teams) - it's a no-op unless ph_ragdolled is set.
+function meta:ClearRagdoll()
+	if CLIENT || !self:IsValid() then return end
+	if !self.ph_ragdolled then return end
+
+	local rag = self.ph_ragdoll_ent
+	if IsValid(rag) then
+		self:SetPos(rag:GetPos())
+		rag:Remove()
+	end
+
+	self.ph_ragdolled = false
+	self.ph_ragdoll_ent = nil
+	self:SetNoDraw(false)
+	self:UnLock()
+	self:SetNWBool("PH_Ragdolled", false)
+	self:SetNWEntity("PH_RagdollEnt", NULL)
+end
+
+
 -- Neither players nor disguised props should physically shove each other around
 -- (a hunter walking into a hiding prop shouldn't push it out of place), but this
 -- MUST be done via GM:ShouldCollide rather than SetCollisionGroup. Two collision
