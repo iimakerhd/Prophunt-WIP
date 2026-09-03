@@ -26,6 +26,10 @@ HUNTER_FIRE_PENALTY = 5
 HUNTER_KILL_BONUS = 100
 
 
+-- Number of decoys a prop can drop per life (Default: 3)
+DECOY_CHARGES_PER_LIFE = 3
+
+
 -- If you loose one of these will be played
 -- Set blank to disable
 
