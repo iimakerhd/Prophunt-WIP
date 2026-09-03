@@ -48,6 +48,14 @@ function CLASS:OnSpawn(pl)
 	
 	pl.ph_prop.max_health = 100
 	pl:SetNWBool("PH_RotateLocked", false)
+
+	-- Decoys are prop-only and refill each life. Kept here (rather than the
+	-- generic PlayerSpawn hook in gamemode/init.lua, which also fires for
+	-- hunters) so hunters never carry a charge count that means nothing to
+	-- them. PH_DecoyCharges is networked so the drop-decoy HUD hint
+	-- (gamemode/cl_init.lua) can show the count without a round trip.
+	pl.ph_decoy_charges = DECOY_CHARGES_PER_LIFE
+	pl:SetNWInt("PH_DecoyCharges", DECOY_CHARGES_PER_LIFE)
 end
 
 if CLIENT then
@@ -105,6 +113,7 @@ end
 -- Called when a player dies with this class
 function CLASS:OnDeath(pl, attacker, dmginfo)
 	pl:RemoveProp()
+	pl:RemoveDecoy()
 end
 
 
