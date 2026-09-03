@@ -64,12 +64,13 @@ end
 
 -- Called when a player dies with this class
 function CLASS:OnDeath(pl, attacker, dmginfo)
-	-- Safety net: if this hunter died while ragdolled by a liquid trail
-	-- (meta:BecomeRagdoll, sh_player.lua), clear that state and remove the
-	-- stand-in prop_ragdoll BEFORE CreateRagdoll() makes the normal death
-	-- ragdoll - otherwise the player would stay permanently SetNoDraw(true)
-	-- and leave an orphaned extra ragdoll behind.
+	-- Safety net: if this hunter died while ragdolled/stunned by a prop
+	-- power-up (meta:BecomeRagdoll/meta:Stun, sh_player.lua), clear that
+	-- state BEFORE CreateRagdoll() makes the normal death ragdoll -
+	-- otherwise the player could stay permanently SetNoDraw(true), leave an
+	-- orphaned extra ragdoll behind, or stay frozen after respawning.
 	pl:ClearRagdoll()
+	pl:ClearStun()
 
 	pl:CreateRagdoll()
 	pl:UnLock()
