@@ -75,6 +75,10 @@ function HUDPaint()
 			else
 				draw.DrawText("Hold [Space] near a wall to climb and stick to it.", "MyFont", 20, 100, Color(255, 255, 255, 255), TEXT_ALIGN_LEFT)
 			end
+
+			local decoyCharges = lp:GetNWInt("PH_DecoyCharges", 0)
+			local decoyColor = decoyCharges > 0 and Color(255, 220, 100, 255) or Color(150, 150, 150, 255)
+			draw.DrawText("Press [G] to drop a decoy. Charges left: "..decoyCharges, "MyFont", 20, 120, decoyColor, TEXT_ALIGN_LEFT)
 		end
 	end
 end
@@ -95,6 +99,27 @@ hook.Add("Think", "PH_PropRotateLockThink", function()
 	end
 
 	lastLockKey = down
+end)
+
+-- Sends a PH_DropDecoy request to the server on the rising edge of [G] (down
+-- this tick, not down last tick) so holding the key doesn't spam drops every
+-- frame. The server is still the authority on charges/team/round state -
+-- this only decides when to ask.
+local lastDecoyKey = false
+hook.Add("Think", "PH_DropDecoyThink", function()
+	local lp = LocalPlayer()
+	if !IsValid(lp) or lp:Team() != TEAM_PROPS or !lp:Alive() then
+		lastDecoyKey = false
+		return
+	end
+
+	local down = input.IsKeyDown(KEY_G)
+	if down and not lastDecoyKey then
+		net.Start("PH_DropDecoy")
+		net.SendToServer()
+	end
+
+	lastDecoyKey = down
 end)
 
 
