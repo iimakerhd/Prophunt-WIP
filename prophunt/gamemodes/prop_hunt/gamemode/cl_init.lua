@@ -12,6 +12,21 @@ function GM:CalcView(pl, origin, angles, fov)
 		
 		return view
 	end
+
+	-- Ragdolled Hunters (liquid trail power-up, see meta:BecomeRagdoll in
+	-- sh_player.lua) have their real body frozen and hidden - hover the
+	-- camera over the stand-in prop_ragdoll instead of leaving them staring
+	-- from the frozen, invisible body's original position.
+	if pl:Team() == TEAM_HUNTERS && pl:GetNWBool("PH_Ragdolled", false) then
+		local rag = pl:GetNWEntity("PH_RagdollEnt", NULL)
+		if IsValid(rag) then
+			view.origin = rag:GetPos() + Vector(0, 0, 60)
+			view.angles = Angle(70, angles.y, 0)
+			view.fov = fov
+
+			return view
+		end
+	end
 	
  	view.origin = origin 
  	view.angles	= angles 
@@ -79,6 +94,15 @@ function HUDPaint()
 			local decoyCharges = lp:GetNWInt("PH_DecoyCharges", 0)
 			local decoyColor = decoyCharges > 0 and Color(255, 220, 100, 255) or Color(150, 150, 150, 255)
 			draw.DrawText("Press [G] to drop a decoy. Charges left: "..decoyCharges, "MyFont", 20, 120, decoyColor, TEXT_ALIGN_LEFT)
+
+			local liquidCharges = lp:GetNWInt("PH_LiquidCharges", 0)
+			local liquidTrailEnd = lp:GetNWFloat("PH_LiquidTrailEndTime", 0)
+			if liquidTrailEnd > CurTime() then
+				draw.DrawText("Liquid trail active! ("..math.ceil(liquidTrailEnd - CurTime()).."s left)", "MyFont", 20, 140, Color(120, 255, 120, 255), TEXT_ALIGN_LEFT)
+			else
+				local liquidColor = liquidCharges > 0 and Color(120, 255, 120, 255) or Color(150, 150, 150, 255)
+				draw.DrawText("Press [H] to leave a ragdoll-trap trail. Charges left: "..liquidCharges, "MyFont", 20, 140, liquidColor, TEXT_ALIGN_LEFT)
+			end
 		end
 	end
 end
@@ -120,6 +144,27 @@ hook.Add("Think", "PH_DropDecoyThink", function()
 	end
 
 	lastDecoyKey = down
+end)
+
+-- Sends a PH_ActivateLiquidTrail request on the rising edge of [H]. Same
+-- edge-detect pattern as the decoy/rotate-lock keys - server is still the
+-- authority on charges/team/round state and on ignoring a repeat press
+-- while already trailing.
+local lastLiquidKey = false
+hook.Add("Think", "PH_LiquidTrailThink", function()
+	local lp = LocalPlayer()
+	if !IsValid(lp) or lp:Team() != TEAM_PROPS or !lp:Alive() then
+		lastLiquidKey = false
+		return
+	end
+
+	local down = input.IsKeyDown(KEY_H)
+	if down and not lastLiquidKey then
+		net.Start("PH_ActivateLiquidTrail")
+		net.SendToServer()
+	end
+
+	lastLiquidKey = down
 end)
 
 
