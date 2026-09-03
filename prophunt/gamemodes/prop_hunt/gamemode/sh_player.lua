@@ -32,6 +32,26 @@ function meta:RemoveProp()
 end
 
 
+-- Removes any decoys this player currently has placed. A player can hold
+-- multiple live decoys at once (one per drop, up to DECOY_CHARGES_PER_LIFE),
+-- so this tracks them as a list rather than a single entity like ph_prop -
+-- otherwise dropping a second decoy would orphan the first one instead of
+-- cleaning it up here.
+function meta:RemoveDecoy()
+	if CLIENT || !self:IsValid() then return end
+
+	if !self.ph_decoys then return end
+
+	for _, decoy in ipairs(self.ph_decoys) do
+		if IsValid(decoy) then
+			decoy:Remove()
+		end
+	end
+
+	self.ph_decoys = {}
+end
+
+
 -- Neither players nor disguised props should physically shove each other around
 -- (a hunter walking into a hiding prop shouldn't push it out of place), but this
 -- MUST be done via GM:ShouldCollide rather than SetCollisionGroup. Two collision
