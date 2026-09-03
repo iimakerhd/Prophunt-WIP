@@ -53,6 +53,7 @@ util.AddNetworkString("PH_PropTauntList")
 util.AddNetworkString("PlayerKilledByPlayer")
 util.AddNetworkString("PH_SetHunterModel")
 util.AddNetworkString("PH_DropDecoy")
+util.AddNetworkString("PH_ActivateLiquidTrail")
 net.Receive("PH_RotateProp", function(len, pl)
 	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
 	if pl:GetNWBool("PH_RotateLocked", false) then return end
@@ -107,6 +108,45 @@ net.Receive("PH_DropDecoy", function(len, pl)
 
 	pl.ph_decoy_charges = charges - 1
 	pl:SetNWInt("PH_DecoyCharges", pl.ph_decoy_charges)
+end)
+
+-- Activates the liquid trail power-up: for LIQUID_TRAIL_ACTIVE_TIME seconds,
+-- drops a ph_liquid_trail puddle segment at the player's position every
+-- LIQUID_TRAIL_SEGMENT_INTERVAL seconds. Any Hunter that steps in a segment
+-- gets ragdolled (see ph_liquid_trail/init.lua and meta:BecomeRagdoll in
+-- sh_player.lua). One repeating timer per player, keyed by EntIndex so it
+-- can't collide with another player's - stopped early via
+-- meta:StopLiquidTrail() on death/disconnect, or naturally once the active
+-- window ends.
+net.Receive("PH_ActivateLiquidTrail", function(len, pl)
+	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
+	if !GAMEMODE:InRound() then return end
+	if pl.ph_liquid_trail_active then return end -- already trailing, ignore repeat presses
+
+	local charges = pl.ph_liquid_charges or 0
+	if charges <= 0 then return end
+
+	pl.ph_liquid_charges = charges - 1
+	pl:SetNWInt("PH_LiquidCharges", pl.ph_liquid_charges)
+
+	pl.ph_liquid_trail_active = true
+	local endTime = CurTime() + LIQUID_TRAIL_ACTIVE_TIME
+	pl:SetNWFloat("PH_LiquidTrailEndTime", endTime)
+
+	timer.Create("PH_LiquidTrail_" .. pl:EntIndex(), LIQUID_TRAIL_SEGMENT_INTERVAL, 0, function()
+		if !IsValid(pl) or !pl:Alive() or CurTime() >= endTime then
+			timer.Remove("PH_LiquidTrail_" .. pl:EntIndex())
+			if IsValid(pl) then pl.ph_liquid_trail_active = false end
+			return
+		end
+
+		local segment = ents.Create("ph_liquid_trail")
+		if IsValid(segment) then
+			segment:SetPos(pl:GetPos())
+			segment:SetOwner(pl)
+			segment:Spawn()
+		end
+	end)
 end)
 
 net.Receive("PH_PlayTaunt", function(len, pl)
@@ -471,6 +511,8 @@ hook.Add("Initialize", "PH_Initialize", Initialize)
 function PlayerDisconnected(pl)
 	pl:RemoveProp()
 	pl:RemoveDecoy()
+	pl:StopLiquidTrail()
+	pl:ClearRagdoll()
 end
 hook.Add("PlayerDisconnected", "PH_PlayerDisconnected", PlayerDisconnected)
 
@@ -565,13 +607,23 @@ end
 function GM:OnPreRoundStart(num)
 	game.CleanUpMap()
 
-	-- Decoys are per-life and shouldn't survive into a new round. This is a
-	-- belt-and-suspenders map-wide sweep on top of meta:RemoveDecoy() (which
-	-- only catches a specific player's own decoys on death/disconnect) - it
-	-- also catches anything that slipped through, e.g. a mid-round map
-	-- change or plugin interaction.
+	-- Decoys and liquid trail puddles are per-life and shouldn't survive
+	-- into a new round. This is a belt-and-suspenders map-wide sweep on top
+	-- of meta:RemoveDecoy()/meta:StopLiquidTrail() (which only catch a
+	-- specific player's own stuff on death/disconnect) - it also catches
+	-- anything that slipped through, e.g. a mid-round map change.
 	for _, decoy in pairs(ents.FindByClass("ph_decoy")) do
 		decoy:Remove()
+	end
+	for _, puddle in pairs(ents.FindByClass("ph_liquid_trail")) do
+		puddle:Remove()
+	end
+
+	-- Any Hunter still ragdolled from a liquid trail when a new round starts
+	-- gets restored immediately rather than staying frozen/hidden into the
+	-- next round.
+	for _, pl in pairs(team.GetPlayers(TEAM_HUNTERS)) do
+		pl:ClearRagdoll()
 	end
 	
 		if GetGlobalInt("RoundNumber") != 1 && (SWAP_TEAMS_EVERY_ROUND == 1 || ((team.GetScore(TEAM_PROPS) + team.GetScore(TEAM_HUNTERS)) > 0 || SWAP_TEAMS_POINTS_ZERO==1)) then
