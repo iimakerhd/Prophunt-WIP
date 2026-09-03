@@ -30,6 +30,22 @@ HUNTER_KILL_BONUS = 100
 DECOY_CHARGES_PER_LIFE = 3
 
 
+-- Number of flashbangs a prop starts each life with (Default: 2)
+FLASHBANG_CHARGES_PER_LIFE = 2
+
+
+-- Radius (in units) a thrown flashbang blinds Hunters within, given a clear
+-- line of sight to the pop - a wall or door between them blocks it entirely (Default: 450)
+FLASHBANG_RADIUS = 450
+
+
+-- Longest a Hunter can be blinded for, at point-blank range - falls off
+-- linearly with distance down to a 1 second floor at the edge of
+-- FLASHBANG_RADIUS. Blinding only affects view (see meta:Blind in
+-- sh_player.lua) - movement is never touched. (Default: 4)
+FLASHBANG_DURATION = 4
+
+
 -- If you loose one of these will be played
 -- Set blank to disable
 
