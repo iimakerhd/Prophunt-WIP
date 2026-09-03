@@ -52,6 +52,7 @@ util.AddNetworkString("PH_RequestPropTaunts")
 util.AddNetworkString("PH_PropTauntList")
 util.AddNetworkString("PlayerKilledByPlayer")
 util.AddNetworkString("PH_SetHunterModel")
+util.AddNetworkString("PH_DropDecoy")
 net.Receive("PH_RotateProp", function(len, pl)
 	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
 	if pl:GetNWBool("PH_RotateLocked", false) then return end
@@ -72,6 +73,40 @@ net.Receive("PH_TogglePropRotateLock", function(len, pl)
 
 	local locked = !pl:GetNWBool("PH_RotateLocked", false)
 	pl:SetNWBool("PH_RotateLocked", locked)
+end)
+
+-- Drops a decoy at the player's current disguised position/model - a fake
+-- copy of their prop meant to bait a hunter into wasting a shot. Prop-only,
+-- gated on the player's remaining per-life charges (DECOY_CHARGES_PER_LIFE,
+-- refilled in class_prop.lua:OnSpawn). Decoys are tracked per-player in
+-- pl.ph_decoys so meta:RemoveDecoy() (sh_player.lua) can clean them all up
+-- on death/disconnect, and they're hard-cleared map-wide at round start below.
+net.Receive("PH_DropDecoy", function(len, pl)
+	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
+	if !GAMEMODE:InRound() then return end
+	if !pl.ph_prop || !pl.ph_prop:IsValid() then return end
+
+	local charges = pl.ph_decoy_charges or 0
+	if charges <= 0 then return end
+
+	local decoy = ents.Create("ph_decoy")
+	if !IsValid(decoy) then return end
+
+	decoy:Spawn()
+	decoy:SetupFromProp(
+		pl.ph_prop:GetModel(),
+		pl.ph_prop:GetSkin(),
+		pl.ph_prop:OBBMins(),
+		pl.ph_prop:OBBMaxs(),
+		pl.ph_prop:GetPos(),
+		pl.ph_prop:GetAngles()
+	)
+
+	pl.ph_decoys = pl.ph_decoys or {}
+	table.insert(pl.ph_decoys, decoy)
+
+	pl.ph_decoy_charges = charges - 1
+	pl:SetNWInt("PH_DecoyCharges", pl.ph_decoy_charges)
 end)
 
 net.Receive("PH_PlayTaunt", function(len, pl)
@@ -435,6 +470,7 @@ hook.Add("Initialize", "PH_Initialize", Initialize)
 -- Called when a player leaves
 function PlayerDisconnected(pl)
 	pl:RemoveProp()
+	pl:RemoveDecoy()
 end
 hook.Add("PlayerDisconnected", "PH_PlayerDisconnected", PlayerDisconnected)
 
@@ -528,6 +564,15 @@ end
 -- Called before start of round
 function GM:OnPreRoundStart(num)
 	game.CleanUpMap()
+
+	-- Decoys are per-life and shouldn't survive into a new round. This is a
+	-- belt-and-suspenders map-wide sweep on top of meta:RemoveDecoy() (which
+	-- only catches a specific player's own decoys on death/disconnect) - it
+	-- also catches anything that slipped through, e.g. a mid-round map
+	-- change or plugin interaction.
+	for _, decoy in pairs(ents.FindByClass("ph_decoy")) do
+		decoy:Remove()
+	end
 	
 		if GetGlobalInt("RoundNumber") != 1 && (SWAP_TEAMS_EVERY_ROUND == 1 || ((team.GetScore(TEAM_PROPS) + team.GetScore(TEAM_HUNTERS)) > 0 || SWAP_TEAMS_POINTS_ZERO==1)) then
 		for _, pl in pairs(player.GetAll()) do
