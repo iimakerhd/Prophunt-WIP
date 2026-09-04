@@ -101,11 +101,11 @@ function HUDPaint()
 			end
 
 			-- Only ONE power-up is live this round (see PROP_POWERUPS in
-			-- sh_config.lua and GM:OnPreRoundStart in gamemode/init.lua) -
-			-- show which one, then only that power-up's specific hint line.
-			-- The other three abilities' charge counts are already zeroed
-			-- server-side (class_prop.lua:OnSpawn), so there's nothing to
-			-- show for them even if this block were skipped entirely.
+			-- sh_config.lua and GM:OnPreRoundStart in gamemode/init.lua),
+			-- and all four are now triggered by the SAME key [G] (single
+			-- PH_UsePowerUp net message, server dispatches by round pick -
+			-- see gamemode/init.lua). Show which power-up it is, then only
+			-- that power-up's specific hint line.
 			local roundPowerUp = GetGlobalString("PH_RoundPowerUp", "")
 			draw.DrawText("This round's power-up: "..(POWERUP_DISPLAY_NAMES[roundPowerUp] or "none"), "MyFont", 20, 120, Color(255, 255, 255, 255), TEXT_ALIGN_LEFT)
 
@@ -114,9 +114,9 @@ function HUDPaint()
 				local decoyColor = decoyCharges > 0 and Color(255, 220, 100, 255) or Color(150, 150, 150, 255)
 				draw.DrawText("Press [G] to drop a decoy. Charges left: "..decoyCharges, "MyFont", 20, 140, decoyColor, TEXT_ALIGN_LEFT)
 			elseif roundPowerUp == "flashbang" then
-				local flashCharges = lp:GetAmmoCount("PHFlashbang")
+				local flashCharges = lp:GetNWInt("PH_FlashbangCharges", 0)
 				local flashColor = flashCharges > 0 and Color(255, 220, 100, 255) or Color(150, 150, 150, 255)
-				draw.DrawText("Left click to throw your flashbang. Charges left: "..flashCharges, "MyFont", 20, 140, flashColor, TEXT_ALIGN_LEFT)
+				draw.DrawText("Press [G] to throw a flashbang. Charges left: "..flashCharges, "MyFont", 20, 140, flashColor, TEXT_ALIGN_LEFT)
 			elseif roundPowerUp == "liquid_trail" then
 				local liquidCharges = lp:GetNWInt("PH_LiquidCharges", 0)
 				local liquidTrailEnd = lp:GetNWFloat("PH_LiquidTrailEndTime", 0)
@@ -124,12 +124,12 @@ function HUDPaint()
 					draw.DrawText("Liquid trail active! ("..math.ceil(liquidTrailEnd - CurTime()).."s left)", "MyFont", 20, 140, Color(120, 255, 120, 255), TEXT_ALIGN_LEFT)
 				else
 					local liquidColor = liquidCharges > 0 and Color(120, 255, 120, 255) or Color(150, 150, 150, 255)
-					draw.DrawText("Press [H] to leave a ragdoll-trap trail. Charges left: "..liquidCharges, "MyFont", 20, 140, liquidColor, TEXT_ALIGN_LEFT)
+					draw.DrawText("Press [G] to leave a ragdoll-trap trail. Charges left: "..liquidCharges, "MyFont", 20, 140, liquidColor, TEXT_ALIGN_LEFT)
 				end
 			elseif roundPowerUp == "shockwave" then
 				local shockwaveCharges = lp:GetNWInt("PH_ShockwaveCharges", 0)
 				local shockwaveColor = shockwaveCharges > 0 and Color(150, 200, 255, 255) or Color(150, 150, 150, 255)
-				draw.DrawText("Press [V] for a shockwave - stuns nearby Hunters through walls. Charges left: "..shockwaveCharges, "MyFont", 20, 140, shockwaveColor, TEXT_ALIGN_LEFT)
+				draw.DrawText("Press [G] for a shockwave - stuns nearby Hunters through walls. Charges left: "..shockwaveCharges, "MyFont", 20, 140, shockwaveColor, TEXT_ALIGN_LEFT)
 			end
 		end
 
@@ -168,64 +168,28 @@ hook.Add("Think", "PH_PropRotateLockThink", function()
 	lastLockKey = down
 end)
 
--- Sends a PH_DropDecoy request to the server on the rising edge of [G] (down
--- this tick, not down last tick) so holding the key doesn't spam drops every
--- frame. The server is still the authority on charges/team/round state/
--- which power-up is active this round - this only decides when to ask.
-local lastDecoyKey = false
-hook.Add("Think", "PH_DropDecoyThink", function()
+-- Sends a single PH_UsePowerUp request to the server on the rising edge of
+-- [G] (down this tick, not down last tick) so holding the key doesn't spam
+-- requests every frame. One key for all four power-ups now (previously
+-- separate G/H/V keys plus a left-click weapon for flashbang) - the server
+-- looks up which power-up is actually live this round and dispatches
+-- accordingly (gamemode/init.lua: net.Receive("PH_UsePowerUp")). This client
+-- code doesn't need to know or care which power-up it is.
+local lastPowerUpKey = false
+hook.Add("Think", "PH_UsePowerUpThink", function()
 	local lp = LocalPlayer()
 	if !IsValid(lp) or lp:Team() != TEAM_PROPS or !lp:Alive() then
-		lastDecoyKey = false
+		lastPowerUpKey = false
 		return
 	end
 
 	local down = input.IsKeyDown(KEY_G)
-	if down and not lastDecoyKey then
-		net.Start("PH_DropDecoy")
+	if down and not lastPowerUpKey then
+		net.Start("PH_UsePowerUp")
 		net.SendToServer()
 	end
 
-	lastDecoyKey = down
-end)
-
--- Sends a PH_ActivateLiquidTrail request on the rising edge of [H]. Same
--- edge-detect pattern as the decoy/rotate-lock keys - server is still the
--- authority on charges/team/round state/active power-up.
-local lastLiquidKey = false
-hook.Add("Think", "PH_LiquidTrailThink", function()
-	local lp = LocalPlayer()
-	if !IsValid(lp) or lp:Team() != TEAM_PROPS or !lp:Alive() then
-		lastLiquidKey = false
-		return
-	end
-
-	local down = input.IsKeyDown(KEY_H)
-	if down and not lastLiquidKey then
-		net.Start("PH_ActivateLiquidTrail")
-		net.SendToServer()
-	end
-
-	lastLiquidKey = down
-end)
-
--- Sends a PH_Shockwave request on the rising edge of [V]. Same edge-detect
--- pattern as the other power-up keys.
-local lastShockwaveKey = false
-hook.Add("Think", "PH_ShockwaveThink", function()
-	local lp = LocalPlayer()
-	if !IsValid(lp) or lp:Team() != TEAM_PROPS or !lp:Alive() then
-		lastShockwaveKey = false
-		return
-	end
-
-	local down = input.IsKeyDown(KEY_V)
-	if down and not lastShockwaveKey then
-		net.Start("PH_Shockwave")
-		net.SendToServer()
-	end
-
-	lastShockwaveKey = down
+	lastPowerUpKey = down
 end)
 
 
