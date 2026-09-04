@@ -103,6 +103,25 @@ function HUDPaint()
 				local liquidColor = liquidCharges > 0 and Color(120, 255, 120, 255) or Color(150, 150, 150, 255)
 				draw.DrawText("Press [H] to leave a ragdoll-trap trail. Charges left: "..liquidCharges, "MyFont", 20, 140, liquidColor, TEXT_ALIGN_LEFT)
 			end
+
+			local shockwaveCharges = lp:GetNWInt("PH_ShockwaveCharges", 0)
+			local shockwaveColor = shockwaveCharges > 0 and Color(150, 200, 255, 255) or Color(150, 150, 150, 255)
+			draw.DrawText("Press [V] for a shockwave - stuns nearby Hunters through walls. Charges left: "..shockwaveCharges, "MyFont", 20, 160, shockwaveColor, TEXT_ALIGN_LEFT)
+		end
+
+		-- Purely client-side "you're stunned" feedback for the affected
+		-- Hunter - a translucent electric-blue screen tint plus a
+		-- countdown. This does NOT affect their view/aim, only overlays it -
+		-- the actual inability to move/act comes from the server-side
+		-- meta:Lock() inside meta:Stun() (sh_player.lua).
+		if lp && lp:Team() == TEAM_HUNTERS && lp:GetNWBool("PH_Stunned", false) then
+			local scrW, scrH = ScrW(), ScrH()
+			draw.RoundedBox(0, 0, 0, scrW, scrH, Color(80, 140, 255, 70))
+
+			surface.SetFont("MyFont")
+			local msg = "STUNNED"
+			local tw, th = surface.GetTextSize(msg)
+			draw.DrawText(msg, "MyFont", scrW / 2 - tw / 2, scrH / 2 - th / 2, Color(255, 255, 255, 220), TEXT_ALIGN_LEFT)
 		end
 	end
 end
@@ -165,6 +184,25 @@ hook.Add("Think", "PH_LiquidTrailThink", function()
 	end
 
 	lastLiquidKey = down
+end)
+
+-- Sends a PH_Shockwave request on the rising edge of [V]. Same edge-detect
+-- pattern as the other power-up keys.
+local lastShockwaveKey = false
+hook.Add("Think", "PH_ShockwaveThink", function()
+	local lp = LocalPlayer()
+	if !IsValid(lp) or lp:Team() != TEAM_PROPS or !lp:Alive() then
+		lastShockwaveKey = false
+		return
+	end
+
+	local down = input.IsKeyDown(KEY_V)
+	if down and not lastShockwaveKey then
+		net.Start("PH_Shockwave")
+		net.SendToServer()
+	end
+
+	lastShockwaveKey = down
 end)
 
 
