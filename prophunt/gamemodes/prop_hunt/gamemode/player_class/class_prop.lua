@@ -11,21 +11,11 @@ CLASS.DuckSpeed				= 0.3
 CLASS.DrawTeamRing			= false
 
 
--- Called by spawn and sets loadout
+-- Called by spawn and sets loadout. All four power-ups are now triggered by
+-- a single key -> single net message (PH_UsePowerUp, gamemode/init.lua) -
+-- flashbang included, no longer a pick-up-and-left-click weapon - so there's
+-- nothing to give here anymore.
 function CLASS:Loadout(pl)
-	-- Flashbang is the only power-up delivered as an actual weapon (the
-	-- other three are keybind abilities) - only give/ammo it if flashbang
-	-- is this round's single random pick (GetGlobalString("PH_RoundPowerUp"),
-	-- set in gamemode/init.lua:GM:OnPreRoundStart). Otherwise the prop
-	-- simply doesn't get the weapon this round.
-	if GetGlobalString("PH_RoundPowerUp", "") == "flashbang" then
-		pl:Give("weapon_ph_flashbang")
-
-		-- SetAmmo (not GiveAmmo) so a leftover partial charge count from a
-		-- previous life never carries over - always exactly
-		-- FLASHBANG_CHARGES_PER_LIFE at the start of a new life.
-		pl:SetAmmo(FLASHBANG_CHARGES_PER_LIFE, "PHFlashbang")
-	end
 end
 
 
@@ -66,13 +56,18 @@ function CLASS:OnSpawn(pl)
 	-- gamemode/init.lua:GM:OnPreRoundStart and shared here via
 	-- GetGlobalString("PH_RoundPowerUp") - NOT re-rolled per player/life.
 	-- Only the matching charge pool gets refilled; the other three are
-	-- explicitly zeroed so their keybinds/HUD naturally do nothing this
-	-- round (and the server-side net handlers in gamemode/init.lua also
-	-- gate on the same global, so this isn't just a UI-level restriction).
+	-- explicitly zeroed so the single power-up key naturally does nothing
+	-- for them this round (and PH_UsePowerUp's dispatcher in
+	-- gamemode/init.lua also gates on the same global, so this isn't just a
+	-- UI-level restriction). Flashbang is now a plain charge counter just
+	-- like the other three (previously it was ammo on a SWEP).
 	local roundPowerUp = GetGlobalString("PH_RoundPowerUp", "")
 
 	pl.ph_decoy_charges = (roundPowerUp == "decoy") and DECOY_CHARGES_PER_LIFE or 0
 	pl:SetNWInt("PH_DecoyCharges", pl.ph_decoy_charges)
+
+	pl.ph_flashbang_charges = (roundPowerUp == "flashbang") and FLASHBANG_CHARGES_PER_LIFE or 0
+	pl:SetNWInt("PH_FlashbangCharges", pl.ph_flashbang_charges)
 
 	pl.ph_liquid_charges = (roundPowerUp == "liquid_trail") and LIQUID_TRAIL_CHARGES_PER_LIFE or 0
 	pl:SetNWInt("PH_LiquidCharges", pl.ph_liquid_charges)
