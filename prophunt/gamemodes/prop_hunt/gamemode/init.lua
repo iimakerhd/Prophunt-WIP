@@ -83,9 +83,16 @@ end)
 -- refilled in class_prop.lua:OnSpawn). Decoys are tracked per-player in
 -- pl.ph_decoys so meta:RemoveDecoy() (sh_player.lua) can clean them all up
 -- on death/disconnect, and they're hard-cleared map-wide at round start below.
+--
+-- Also gated on GetGlobalString("PH_RoundPowerUp") == "decoy" - the round's
+-- single random power-up pick, set in GM:OnPreRoundStart below. In practice
+-- charges are already 0 for a player whose round's power-up isn't decoy
+-- (class_prop.lua:OnSpawn), so this check is a redundant second line of
+-- defense, not the primary gate - but it's cheap and makes the intent explicit.
 net.Receive("PH_DropDecoy", function(len, pl)
 	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
 	if !GAMEMODE:InRound() then return end
+	if GetGlobalString("PH_RoundPowerUp", "") != "decoy" then return end
 	if !pl.ph_prop || !pl.ph_prop:IsValid() then return end
 
 	local charges = pl.ph_decoy_charges or 0
@@ -118,10 +125,12 @@ end)
 -- sh_player.lua). One repeating timer per player, keyed by EntIndex so it
 -- can't collide with another player's - stopped early via
 -- meta:StopLiquidTrail() on death/disconnect, or naturally once the active
--- window ends.
+-- window ends. Gated on this round's power-up pick - see the PH_DropDecoy
+-- comment above for why the charges<=0 check is the real gate.
 net.Receive("PH_ActivateLiquidTrail", function(len, pl)
 	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
 	if !GAMEMODE:InRound() then return end
+	if GetGlobalString("PH_RoundPowerUp", "") != "liquid_trail" then return end
 	if pl.ph_liquid_trail_active then return end -- already trailing, ignore repeat presses
 
 	local charges = pl.ph_liquid_charges or 0
@@ -157,10 +166,12 @@ end)
 -- which is the whole point of differentiating it from the flashbang. That's
 -- also why it only gets SHOCKWAVE_CHARGES_PER_LIFE charges (default 1) -
 -- it's meant to be a rare "get me out of trouble" panic button, not a
--- repeatable area denial tool.
+-- repeatable area denial tool. Gated on this round's power-up pick - see the
+-- PH_DropDecoy comment above for why the charges<=0 check is the real gate.
 net.Receive("PH_Shockwave", function(len, pl)
 	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
 	if !GAMEMODE:InRound() then return end
+	if GetGlobalString("PH_RoundPowerUp", "") != "shockwave" then return end
 
 	local charges = pl.ph_shockwave_charges or 0
 	if charges <= 0 then return end
@@ -650,6 +661,15 @@ end
 -- Called before start of round
 function GM:OnPreRoundStart(num)
 	game.CleanUpMap()
+
+	-- Pick THIS round's single prop power-up (see PROP_POWERUPS in
+	-- sh_config.lua). Shared by the whole prop team for the round, not
+	-- re-rolled per player - set once here as a networked global so every
+	-- client can read it too (for the HUD hint) and every server-side power-up
+	-- handler above can gate on it. class_prop.lua:OnSpawn reads this to decide
+	-- which single charge pool actually gets refilled each life.
+	PH_RoundPowerUp = table.Random(PROP_POWERUPS)
+	SetGlobalString("PH_RoundPowerUp", PH_RoundPowerUp)
 
 	-- Decoys and liquid trail puddles are per-life and shouldn't survive
 	-- into a new round. This is a belt-and-suspenders map-wide sweep on top
