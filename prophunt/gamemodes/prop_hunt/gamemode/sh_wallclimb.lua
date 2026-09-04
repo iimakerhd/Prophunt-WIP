@@ -2,8 +2,9 @@
 -- Wall climbing for the Props team.
 --
 -- Hold [Space] while looking at a nearby wall to stick to it; release to drop
--- off. While stuck, W/A/S/D climb up/down/left/right ALONG the wall's own
--- surface, with gravity effectively disabled via MOVETYPE_FLY.
+-- off. While stuck, W/A/S/D (any combination, including diagonals) move you
+-- freely across the wall's own surface - spider-style - decoupled from
+-- gravity via MOVETYPE_FLY.
 --
 -- This is implemented with the "Move" hook (not a net message + flag) on
 -- purpose: Move runs identically during client-side prediction AND
@@ -13,23 +14,32 @@
 -- jumping, noclip) works. A net-message-driven "start/stop sticking" flag
 -- would introduce a round-trip of latency and prediction mismatches instead.
 --
--- CHAMELEON-STYLE MOVEMENT: climbing direction is deliberately decoupled
--- from where you're LOOKING. An earlier version derived its up/right axes
--- from EyeAngles(), which - the moment you're facing the wall closely enough
--- to stick to it in the first place - is nearly PARALLEL to the wall's own
--- normal. Projecting that onto the wall plane left almost no tangential
--- vector, so pressing any movement key barely moved you at all (felt
--- permanently stuck). wallUp/wallRight below instead come from world-up
--- projected onto the wall's own plane, so they always have full magnitude no
--- matter which way you're facing - press up to climb up, down to climb
--- down, left/right to shimmy sideways, exactly like a lizard/chameleon
--- crawling a surface, and you're free to look around while doing it.
+-- MANUAL POSITION INTEGRATION: an earlier version tried to cooperate with
+-- Source's own MOVETYPE_FLY physics - setting a wall-relative velocity via
+-- mv:SetVelocity() and zeroing forward/side/up wish-speed, hoping the
+-- engine's built-in fly-movement code would then just apply that velocity
+-- cleanly. In practice that wasn't reliably translating into actual
+-- on-screen movement - the built-in fly-movement processing that runs AFTER
+-- this hook has its own friction/acceleration behavior derived from the RAW
+-- view angles that isn't fully neutralized just by zeroing wish-speed, so it
+-- kept fighting/absorbing the injected velocity and produced little to no
+-- net movement. This version sidesteps that uncertainty completely: it sets
+-- the player's ORIGIN directly (mv:SetOrigin()) each tick, using
+-- engine.TickInterval() - a FIXED timestep identical between client-side
+-- prediction and server-side simulation - rather than FrameTime(), which
+-- varies with client FPS and would make the two disagree (that kind of
+-- prediction/server divergence is exactly what produces a hard correction,
+-- i.e. a visible "teleport", once the two get reconciled - which is also
+-- what was making the mirrored ph_prop position glitch). A short TraceHull
+-- sweep checks the destination is clear of solid geometry before committing
+-- to it, so this still can't clip you through a wall.
 -- ===========================================================================
 
 local WALLCLIMB_MAX_DIST = 42    -- how close to a wall (units) before you can stick to it
 local WALLCLIMB_MAX_SLOPE = 0.4  -- how vertical a surface must be to count as a "wall" (0 = perfectly vertical, 1 = flat floor/ceiling)
 local WALLCLIMB_STICK_PULL = 24  -- gentle constant velocity into the wall, to stay glued against small surface irregularities
 local WALLCLIMB_DETACH_PUSH = 80 -- push-away speed when letting go, so you don't immediately re-trace back into the wall
+local WALLCLIMB_SPEED = 200      -- units/sec while crawling across a wall - a fixed speed, not derived from mv:GetForwardSpeed()/GetSideSpeed()
 
 hook.Add("Move", "PH_WallClimbMove", function(pl, mv)
 	if !IsValid(pl) or !pl:Alive() then return end
@@ -60,12 +70,10 @@ hook.Add("Move", "PH_WallClimbMove", function(pl, mv)
 		else
 			-- Already attached: re-probe straight INTO the current wall
 			-- normal from the player's own (moving) position, NOT from
-			-- wherever the view happens to be pointed. This is what lets
-			-- you look around freely while crawling without the trace
-			-- suddenly re-targeting a different nearby surface just
-			-- because you glanced at it, and it naturally lets go of you
-			-- once you've crawled past the edge of the current surface
-			-- (the probe simply stops hitting anything).
+			-- wherever the view happens to be pointed - lets you look
+			-- around freely while crawling without the trace suddenly
+			-- re-targeting a different nearby surface, and naturally lets
+			-- go once you've crawled past the edge of the current surface.
 			local probeStart = mv:GetOrigin() + pl:GetViewOffset()
 			local tr = util.TraceLine({
 				start = probeStart,
@@ -106,42 +114,61 @@ hook.Add("Move", "PH_WallClimbMove", function(pl, mv)
 	if pl.WallSticking and pl.WallNormal then
 		local normal = pl.WallNormal
 
+		-- Wall-local up/right axes, decoupled from view angle - see the
+		-- top-of-file note on why (view-based axes go near-zero exactly
+		-- when facing the wall closely enough to stick to it).
 		local worldUp = Vector(0, 0, 1)
 		local wallUp = worldUp - normal * worldUp:Dot(normal)
 		if wallUp:Length() < 0.001 then
 			-- Only reachable on a near-perfectly flat ceiling/floor, which
-			-- WALLCLIMB_MAX_SLOPE already excludes from being climbable in
-			-- the first place - kept purely as a safe fallback so
-			-- Normalize() below never runs on a zero vector.
+			-- WALLCLIMB_MAX_SLOPE already excludes from being climbable -
+			-- kept purely as a safe fallback so Normalize() never runs on
+			-- a zero vector.
 			wallUp = Vector(0, 1, 0) - normal * Vector(0, 1, 0):Dot(normal)
 		end
 		wallUp:Normalize()
 		local wallRight = wallUp:Cross(normal)
 		wallRight:Normalize()
 
-		-- Capture the player's current forward/side move magnitudes (these
-		-- already respect walk/crouch speed modifiers) BEFORE zeroing them.
-		-- Zeroing is the second half of the fix: without it, Source's own
-		-- built-in fly-movement wishdir/acceleration - computed from these
-		-- plus the RAW view angles, not our wall-relative basis - kept
-		-- trying to ALSO accelerate the player toward wherever they were
-		-- looking (typically straight into the wall) every single tick,
-		-- fighting the velocity set below. That fight is what produced
-		-- unstable, sometimes-divergent movement simulation: it showed up
-		-- as the "stuck" feeling, and - since the disguised prop's position
-		-- is a 1:1 per-tick mirror of the player's position
-		-- (PH_UpdatePropPosition in gamemode/init.lua) - any resulting
-		-- jitter or hard prediction correction on the player showed up as
-		-- the prop visibly glitching/teleporting too. Zeroing UpSpeed also
-		-- stops holding [Space] from additionally floating you upward via
-		-- the engine's own fly-up logic while it's being used to stick.
-		local forwardMove = mv:GetForwardSpeed()
-		local sideMove = mv:GetSideSpeed()
+		-- Spider-style free movement: raw button state (not
+		-- mv:GetForwardSpeed()/GetSideSpeed(), and not view angle) so any
+		-- combination of W/A/S/D - including diagonals - moves you in that
+		-- combined direction across the surface at a flat, predictable
+		-- speed.
+		local moveDir = Vector(0, 0, 0)
+		local buttons = mv:GetButtons()
+		if bit.band(buttons, IN_FORWARD) != 0 then moveDir = moveDir + wallUp end
+		if bit.band(buttons, IN_BACK) != 0 then moveDir = moveDir - wallUp end
+		if bit.band(buttons, IN_MOVERIGHT) != 0 then moveDir = moveDir + wallRight end
+		if bit.band(buttons, IN_MOVELEFT) != 0 then moveDir = moveDir - wallRight end
+
+		if moveDir:Length() > 0.001 then
+			moveDir:Normalize()
+		end
+
+		local vel = moveDir * WALLCLIMB_SPEED - normal * WALLCLIMB_STICK_PULL
+
+		-- Stop the engine's own fly-movement wishdir/acceleration from
+		-- doing anything further with this tick - we're integrating
+		-- position ourselves below, so any additional built-in movement on
+		-- top of that would only reintroduce the exact fighting/divergence
+		-- this rewrite is trying to eliminate.
 		mv:SetForwardSpeed(0)
 		mv:SetSideSpeed(0)
 		mv:SetUpSpeed(0)
 
-		local vel = wallUp * forwardMove + wallRight * sideMove - normal * WALLCLIMB_STICK_PULL
+		local destination = mv:GetOrigin() + vel * engine.TickInterval()
+
+		local tr = util.TraceHull({
+			start = mv:GetOrigin(),
+			endpos = destination,
+			mins = pl:OBBMins(),
+			maxs = pl:OBBMaxs(),
+			filter = pl,
+			mask = MASK_PLAYERSOLID
+		})
+
+		mv:SetOrigin(tr.HitPos)
 		mv:SetVelocity(vel)
 	end
 end)
