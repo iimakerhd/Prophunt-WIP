@@ -54,6 +54,7 @@ util.AddNetworkString("PlayerKilledByPlayer")
 util.AddNetworkString("PH_SetHunterModel")
 util.AddNetworkString("PH_DropDecoy")
 util.AddNetworkString("PH_ActivateLiquidTrail")
+util.AddNetworkString("PH_Shockwave")
 net.Receive("PH_RotateProp", function(len, pl)
 	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
 	if pl:GetNWBool("PH_RotateLocked", false) then return end
@@ -147,6 +148,48 @@ net.Receive("PH_ActivateLiquidTrail", function(len, pl)
 			segment:Spawn()
 		end
 	end)
+end)
+
+-- Triggers the shockwave power-up: an instant AOE pulse centered on the
+-- prop's current disguised position that stuns (meta:Stun) every Hunter
+-- within SHOCKWAVE_RADIUS. Deliberately no line-of-sight check, unlike the
+-- flashbang - a wall between the prop and a Hunter does not protect them,
+-- which is the whole point of differentiating it from the flashbang. That's
+-- also why it only gets SHOCKWAVE_CHARGES_PER_LIFE charges (default 1) -
+-- it's meant to be a rare "get me out of trouble" panic button, not a
+-- repeatable area denial tool.
+net.Receive("PH_Shockwave", function(len, pl)
+	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
+	if !GAMEMODE:InRound() then return end
+
+	local charges = pl.ph_shockwave_charges or 0
+	if charges <= 0 then return end
+
+	pl.ph_shockwave_charges = charges - 1
+	pl:SetNWInt("PH_ShockwaveCharges", pl.ph_shockwave_charges)
+
+	local origin = (pl.ph_prop and IsValid(pl.ph_prop)) and pl.ph_prop:GetPos() or pl:GetPos()
+
+	-- Stock HL2 effect/sound only - "cball_explode" is the built-in combine
+	-- ball detonation ring, a reasonable stand-in for a shockwave pulse with
+	-- zero content dependency. Physcannon energy sound reused for a thematic
+	-- "electric zap" without needing a dedicated sound file.
+	local edata = EffectData()
+	edata:SetOrigin(origin)
+	edata:SetScale(1)
+	util.Effect("cball_explode", edata)
+
+	util.ScreenShake(origin, 8, 4, 0.6, SHOCKWAVE_RADIUS)
+
+	local zapSound = CreateSound(pl, "weapons/physcannon/energy_bounce1.wav")
+	zapSound:PlayEx(1, 100)
+
+	for _, hunter in pairs(team.GetPlayers(TEAM_HUNTERS)) do
+		if !IsValid(hunter) or !hunter:Alive() then continue end
+		if origin:Distance(hunter:GetPos()) > SHOCKWAVE_RADIUS then continue end
+
+		hunter:Stun(SHOCKWAVE_STUN_TIME)
+	end
 end)
 
 net.Receive("PH_PlayTaunt", function(len, pl)
@@ -513,6 +556,7 @@ function PlayerDisconnected(pl)
 	pl:RemoveDecoy()
 	pl:StopLiquidTrail()
 	pl:ClearRagdoll()
+	pl:ClearStun()
 end
 hook.Add("PlayerDisconnected", "PH_PlayerDisconnected", PlayerDisconnected)
 
@@ -619,11 +663,12 @@ function GM:OnPreRoundStart(num)
 		puddle:Remove()
 	end
 
-	-- Any Hunter still ragdolled from a liquid trail when a new round starts
-	-- gets restored immediately rather than staying frozen/hidden into the
-	-- next round.
+	-- Any Hunter still ragdolled or stunned from a prop power-up when a new
+	-- round starts gets restored immediately rather than staying
+	-- frozen/hidden into the next round.
 	for _, pl in pairs(team.GetPlayers(TEAM_HUNTERS)) do
 		pl:ClearRagdoll()
+		pl:ClearStun()
 	end
 	
 		if GetGlobalInt("RoundNumber") != 1 && (SWAP_TEAMS_EVERY_ROUND == 1 || ((team.GetScore(TEAM_PROPS) + team.GetScore(TEAM_HUNTERS)) > 0 || SWAP_TEAMS_POINTS_ZERO==1)) then
