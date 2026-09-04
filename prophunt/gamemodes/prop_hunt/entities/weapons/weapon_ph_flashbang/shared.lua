@@ -70,6 +70,15 @@ function SWEP:PrimaryAttack()
 		return
 	end
 
+	-- Prop team gets exactly ONE random power-up per round (PROP_POWERUPS,
+	-- sh_config.lua) - Loadout (class_prop.lua) already only gives this
+	-- weapon when flashbang is the round's pick, so this should be
+	-- unreachable in normal play. Kept as a second line of defense (e.g.
+	-- against a console-given weapon outliving a round-end power-up reroll).
+	if GetGlobalString("PH_RoundPowerUp", "") != "flashbang" then
+		return
+	end
+
 	if owner:GetAmmoCount(self.Primary.Ammo) <= 0 then
 		self:EmitSound("weapons/pistol/pistol_empty.wav")
 		return
