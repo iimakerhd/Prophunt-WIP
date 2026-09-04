@@ -72,8 +72,11 @@ LIQUID_TRAIL_CHARGES_PER_LIFE = 2
 LIQUID_TRAIL_ACTIVE_TIME = 6
 
 
--- How often (in seconds) a new puddle segment drops while a trail is active (Default: 0.2)
-LIQUID_TRAIL_SEGMENT_INTERVAL = 0.2
+-- How often (in seconds) a new puddle segment drops while a trail is active.
+-- Kept short so consecutive segments overlap into one continuous liquid
+-- trail (see ph_liquid_trail/cl_init.lua) rather than a line of separate
+-- spaced-out blobs. (Default: 0.1)
+LIQUID_TRAIL_SEGMENT_INTERVAL = 0.1
 
 
 -- Seconds a single dropped puddle segment lasts before disappearing on its own (Default: 8)
