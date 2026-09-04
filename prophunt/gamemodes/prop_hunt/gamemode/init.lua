@@ -52,9 +52,7 @@ util.AddNetworkString("PH_RequestPropTaunts")
 util.AddNetworkString("PH_PropTauntList")
 util.AddNetworkString("PlayerKilledByPlayer")
 util.AddNetworkString("PH_SetHunterModel")
-util.AddNetworkString("PH_DropDecoy")
-util.AddNetworkString("PH_ActivateLiquidTrail")
-util.AddNetworkString("PH_Shockwave")
+util.AddNetworkString("PH_UsePowerUp")
 net.Receive("PH_RotateProp", function(len, pl)
 	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
 	if pl:GetNWBool("PH_RotateLocked", false) then return end
@@ -77,22 +75,31 @@ net.Receive("PH_TogglePropRotateLock", function(len, pl)
 	pl:SetNWBool("PH_RotateLocked", locked)
 end)
 
--- Drops a decoy at the player's current disguised position/model - a fake
--- copy of their prop meant to bait a hunter into wasting a shot. Prop-only,
--- gated on the player's remaining per-life charges (DECOY_CHARGES_PER_LIFE,
--- refilled in class_prop.lua:OnSpawn). Decoys are tracked per-player in
--- pl.ph_decoys so meta:RemoveDecoy() (sh_player.lua) can clean them all up
--- on death/disconnect, and they're hard-cleared map-wide at round start below.
+-- ===========================================================================
+-- Prop team power-ups
 --
--- Also gated on GetGlobalString("PH_RoundPowerUp") == "decoy" - the round's
--- single random power-up pick, set in GM:OnPreRoundStart below. In practice
--- charges are already 0 for a player whose round's power-up isn't decoy
--- (class_prop.lua:OnSpawn), so this check is a redundant second line of
--- defense, not the primary gate - but it's cheap and makes the intent explicit.
-net.Receive("PH_DropDecoy", function(len, pl)
-	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
-	if !GAMEMODE:InRound() then return end
-	if GetGlobalString("PH_RoundPowerUp", "") != "decoy" then return end
+-- Exactly ONE power-up is active per round (PROP_POWERUPS in sh_config.lua),
+-- picked once for the whole team in GM:OnPreRoundStart below and shared via
+-- the GetGlobalString("PH_RoundPowerUp") global. All four are now triggered
+-- by a single client key (gamemode/cl_init.lua) sending one net message,
+-- PH_UsePowerUp - the server looks up which power-up is live this round and
+-- dispatches to the matching function below. Flashbang used to be a
+-- separate pick-up-and-left-click weapon (weapon_ph_flashbang); it's been
+-- folded into this same server-authoritative "spawn on key press" pattern
+-- as the other three for consistency, so PH_UsePowerUp_Flashbang below
+-- creates the ph_flashbang projectile directly rather than going through
+-- the SWEP's PrimaryAttack. The weapon_ph_flashbang files still exist in
+-- the repo (the ph_flashbang PROJECTILE entity it throws is still used) but
+-- the SWEP itself is no longer given to anyone and is effectively unused -
+-- fine to delete later if you don't want it kept around as reference.
+-- ===========================================================================
+
+-- Drops a decoy at the player's current disguised position/model - a fake
+-- copy of their prop meant to bait a hunter into wasting a shot. Decoys are
+-- tracked per-player in pl.ph_decoys so meta:RemoveDecoy() (sh_player.lua)
+-- can clean them all up on death/disconnect, and they're hard-cleared
+-- map-wide at round start below.
+local function PH_UsePowerUp_Decoy(pl)
 	if !pl.ph_prop || !pl.ph_prop:IsValid() then return end
 
 	local charges = pl.ph_decoy_charges or 0
@@ -116,7 +123,36 @@ net.Receive("PH_DropDecoy", function(len, pl)
 
 	pl.ph_decoy_charges = charges - 1
 	pl:SetNWInt("PH_DecoyCharges", pl.ph_decoy_charges)
-end)
+end
+
+-- Throws a flashbang from the player's eye position/angle - same projectile
+-- (ph_flashbang) and physics/detonation logic as before, just triggered
+-- directly from the server on key press instead of via a SWEP's PrimaryAttack.
+local function PH_UsePowerUp_Flashbang(pl)
+	local charges = pl.ph_flashbang_charges or 0
+	if charges <= 0 then return end
+
+	local eyeAng = pl:EyeAngles()
+	local throwFrom = pl:EyePos() + eyeAng:Forward() * 16
+
+	local proj = ents.Create("ph_flashbang")
+	if !IsValid(proj) then return end
+
+	proj:SetPos(throwFrom)
+	proj:SetAngles(eyeAng)
+	proj:SetOwner(pl)
+	proj:Spawn()
+
+	local phys = proj:GetPhysicsObject()
+	if IsValid(phys) then
+		phys:SetVelocity(eyeAng:Forward() * 900 + eyeAng:Up() * 150)
+	end
+
+	pl:ViewPunch(Angle(-2, 0, 0))
+
+	pl.ph_flashbang_charges = charges - 1
+	pl:SetNWInt("PH_FlashbangCharges", pl.ph_flashbang_charges)
+end
 
 -- Activates the liquid trail power-up: for LIQUID_TRAIL_ACTIVE_TIME seconds,
 -- drops a ph_liquid_trail puddle segment at the player's position every
@@ -125,12 +161,8 @@ end)
 -- sh_player.lua). One repeating timer per player, keyed by EntIndex so it
 -- can't collide with another player's - stopped early via
 -- meta:StopLiquidTrail() on death/disconnect, or naturally once the active
--- window ends. Gated on this round's power-up pick - see the PH_DropDecoy
--- comment above for why the charges<=0 check is the real gate.
-net.Receive("PH_ActivateLiquidTrail", function(len, pl)
-	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
-	if !GAMEMODE:InRound() then return end
-	if GetGlobalString("PH_RoundPowerUp", "") != "liquid_trail" then return end
+-- window ends.
+local function PH_UsePowerUp_LiquidTrail(pl)
 	if pl.ph_liquid_trail_active then return end -- already trailing, ignore repeat presses
 
 	local charges = pl.ph_liquid_charges or 0
@@ -157,7 +189,7 @@ net.Receive("PH_ActivateLiquidTrail", function(len, pl)
 			segment:Spawn()
 		end
 	end)
-end)
+end
 
 -- Triggers the shockwave power-up: an instant AOE pulse centered on the
 -- prop's current disguised position that stuns (meta:Stun) every Hunter
@@ -166,13 +198,8 @@ end)
 -- which is the whole point of differentiating it from the flashbang. That's
 -- also why it only gets SHOCKWAVE_CHARGES_PER_LIFE charges (default 1) -
 -- it's meant to be a rare "get me out of trouble" panic button, not a
--- repeatable area denial tool. Gated on this round's power-up pick - see the
--- PH_DropDecoy comment above for why the charges<=0 check is the real gate.
-net.Receive("PH_Shockwave", function(len, pl)
-	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
-	if !GAMEMODE:InRound() then return end
-	if GetGlobalString("PH_RoundPowerUp", "") != "shockwave" then return end
-
+-- repeatable area denial tool.
+local function PH_UsePowerUp_Shockwave(pl)
 	local charges = pl.ph_shockwave_charges or 0
 	if charges <= 0 then return end
 
@@ -200,6 +227,29 @@ net.Receive("PH_Shockwave", function(len, pl)
 		if origin:Distance(hunter:GetPos()) > SHOCKWAVE_RADIUS then continue end
 
 		hunter:Stun(SHOCKWAVE_STUN_TIME)
+	end
+end
+
+-- Single dispatcher for all four power-ups - one key (gamemode/cl_init.lua),
+-- one net message, routed by whichever power-up this round's random pick
+-- landed on (GM:OnPreRoundStart below). Each per-type function above also
+-- naturally no-ops via its own charges<=0 check if somehow called for a
+-- player whose round pick doesn't match (shouldn't happen, since OnSpawn in
+-- class_prop.lua only ever gives charges for the matching power-up).
+net.Receive("PH_UsePowerUp", function(len, pl)
+	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
+	if !GAMEMODE:InRound() then return end
+
+	local roundPowerUp = GetGlobalString("PH_RoundPowerUp", "")
+
+	if roundPowerUp == "decoy" then
+		PH_UsePowerUp_Decoy(pl)
+	elseif roundPowerUp == "flashbang" then
+		PH_UsePowerUp_Flashbang(pl)
+	elseif roundPowerUp == "liquid_trail" then
+		PH_UsePowerUp_LiquidTrail(pl)
+	elseif roundPowerUp == "shockwave" then
+		PH_UsePowerUp_Shockwave(pl)
 	end
 end)
 
@@ -665,8 +715,8 @@ function GM:OnPreRoundStart(num)
 	-- Pick THIS round's single prop power-up (see PROP_POWERUPS in
 	-- sh_config.lua). Shared by the whole prop team for the round, not
 	-- re-rolled per player - set once here as a networked global so every
-	-- client can read it too (for the HUD hint) and every server-side power-up
-	-- handler above can gate on it. class_prop.lua:OnSpawn reads this to decide
+	-- client can read it too (for the HUD hint) and PH_UsePowerUp above can
+	-- dispatch based on it. class_prop.lua:OnSpawn reads this to decide
 	-- which single charge pool actually gets refilled each life.
 	PH_RoundPowerUp = table.Random(PROP_POWERUPS)
 	SetGlobalString("PH_RoundPowerUp", PH_RoundPowerUp)
