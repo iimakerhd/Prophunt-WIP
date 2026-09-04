@@ -26,11 +26,28 @@ HUNTER_FIRE_PENALTY = 5
 HUNTER_KILL_BONUS = 100
 
 
--- Number of decoys a prop can drop per life (Default: 3)
+-- Prop team gets exactly ONE of these power-ups per round, picked at random
+-- when the round starts (GM:OnPreRoundStart in gamemode/init.lua) and
+-- shared by the whole team for that round - not re-rolled per player. Every
+-- charge/duration/radius setting below for a given power-up still applies
+-- normally WHEN that's the one picked; it's zeroed out for the other three
+-- for that life. Keys here must exactly match what gamemode/init.lua and
+-- class_prop.lua check for: "decoy", "flashbang", "liquid_trail", "shockwave".
+PROP_POWERUPS = {
+	"decoy",
+	"flashbang",
+	"liquid_trail",
+	"shockwave"
+}
+
+
+-- Number of decoys a prop can drop per life, when decoy is this round's
+-- power-up (Default: 3)
 DECOY_CHARGES_PER_LIFE = 3
 
 
--- Number of flashbangs a prop starts each life with (Default: 2)
+-- Number of flashbangs a prop starts each life with, when flashbang is this
+-- round's power-up (Default: 2)
 FLASHBANG_CHARGES_PER_LIFE = 2
 
 
@@ -46,7 +63,8 @@ FLASHBANG_RADIUS = 450
 FLASHBANG_DURATION = 4
 
 
--- Number of times a prop can activate the liquid trail power-up per life (Default: 2)
+-- Number of times a prop can activate the liquid trail power-up per life,
+-- when liquid trail is this round's power-up (Default: 2)
 LIQUID_TRAIL_CHARGES_PER_LIFE = 2
 
 
@@ -68,9 +86,10 @@ LIQUID_TRAIL_SEGMENT_LIFETIME = 8
 LIQUID_TRAIL_RAGDOLL_TIME = 5
 
 
--- Number of times a prop can trigger the shockwave power-up per life. Kept
--- low (1) relative to decoy/liquid trail since, unlike the flashbang, it
--- needs no line of sight - a wall doesn't protect a Hunter from it. (Default: 1)
+-- Number of times a prop can trigger the shockwave power-up per life, when
+-- shockwave is this round's power-up. Kept low (1) relative to decoy/liquid
+-- trail since, unlike the flashbang, it needs no line of sight - a wall
+-- doesn't protect a Hunter from it. (Default: 1)
 SHOCKWAVE_CHARGES_PER_LIFE = 1
 
 
