@@ -68,6 +68,10 @@ function CLASS:OnSpawn(pl)
 	pl:SetNWInt("PH_LiquidCharges", LIQUID_TRAIL_CHARGES_PER_LIFE)
 	pl.ph_liquid_trail_active = false
 	pl:SetNWFloat("PH_LiquidTrailEndTime", 0)
+
+	-- Same per-life refill pattern for the shockwave power-up.
+	pl.ph_shockwave_charges = SHOCKWAVE_CHARGES_PER_LIFE
+	pl:SetNWInt("PH_ShockwaveCharges", SHOCKWAVE_CHARGES_PER_LIFE)
 end
 
 if CLIENT then
