@@ -13,13 +13,19 @@ CLASS.DrawTeamRing			= false
 
 -- Called by spawn and sets loadout
 function CLASS:Loadout(pl)
-	pl:Give("weapon_ph_flashbang")
+	-- Flashbang is the only power-up delivered as an actual weapon (the
+	-- other three are keybind abilities) - only give/ammo it if flashbang
+	-- is this round's single random pick (GetGlobalString("PH_RoundPowerUp"),
+	-- set in gamemode/init.lua:GM:OnPreRoundStart). Otherwise the prop
+	-- simply doesn't get the weapon this round.
+	if GetGlobalString("PH_RoundPowerUp", "") == "flashbang" then
+		pl:Give("weapon_ph_flashbang")
 
-	-- SetAmmo (not GiveAmmo) so a leftover partial charge count from a
-	-- previous life never carries over - always exactly
-	-- FLASHBANG_CHARGES_PER_LIFE at the start of a new life, same per-life
-	-- reset semantics as pl.ph_decoy_charges (sh_config.lua/class_prop.lua).
-	pl:SetAmmo(FLASHBANG_CHARGES_PER_LIFE, "PHFlashbang")
+		-- SetAmmo (not GiveAmmo) so a leftover partial charge count from a
+		-- previous life never carries over - always exactly
+		-- FLASHBANG_CHARGES_PER_LIFE at the start of a new life.
+		pl:SetAmmo(FLASHBANG_CHARGES_PER_LIFE, "PHFlashbang")
+	end
 end
 
 
@@ -55,23 +61,26 @@ function CLASS:OnSpawn(pl)
 	pl.ph_prop.max_health = 100
 	pl:SetNWBool("PH_RotateLocked", false)
 
-	-- Decoys are prop-only and refill each life. Kept here (rather than the
-	-- generic PlayerSpawn hook in gamemode/init.lua, which also fires for
-	-- hunters) so hunters never carry a charge count that means nothing to
-	-- them. PH_DecoyCharges is networked so the drop-decoy HUD hint
-	-- (gamemode/cl_init.lua) can show the count without a round trip.
-	pl.ph_decoy_charges = DECOY_CHARGES_PER_LIFE
-	pl:SetNWInt("PH_DecoyCharges", DECOY_CHARGES_PER_LIFE)
+	-- Prop team gets exactly ONE power-up per round (PROP_POWERUPS in
+	-- sh_config.lua), picked once for the whole team in
+	-- gamemode/init.lua:GM:OnPreRoundStart and shared here via
+	-- GetGlobalString("PH_RoundPowerUp") - NOT re-rolled per player/life.
+	-- Only the matching charge pool gets refilled; the other three are
+	-- explicitly zeroed so their keybinds/HUD naturally do nothing this
+	-- round (and the server-side net handlers in gamemode/init.lua also
+	-- gate on the same global, so this isn't just a UI-level restriction).
+	local roundPowerUp = GetGlobalString("PH_RoundPowerUp", "")
 
-	-- Same per-life refill pattern for the liquid trail power-up.
-	pl.ph_liquid_charges = LIQUID_TRAIL_CHARGES_PER_LIFE
-	pl:SetNWInt("PH_LiquidCharges", LIQUID_TRAIL_CHARGES_PER_LIFE)
+	pl.ph_decoy_charges = (roundPowerUp == "decoy") and DECOY_CHARGES_PER_LIFE or 0
+	pl:SetNWInt("PH_DecoyCharges", pl.ph_decoy_charges)
+
+	pl.ph_liquid_charges = (roundPowerUp == "liquid_trail") and LIQUID_TRAIL_CHARGES_PER_LIFE or 0
+	pl:SetNWInt("PH_LiquidCharges", pl.ph_liquid_charges)
 	pl.ph_liquid_trail_active = false
 	pl:SetNWFloat("PH_LiquidTrailEndTime", 0)
 
-	-- Same per-life refill pattern for the shockwave power-up.
-	pl.ph_shockwave_charges = SHOCKWAVE_CHARGES_PER_LIFE
-	pl:SetNWInt("PH_ShockwaveCharges", SHOCKWAVE_CHARGES_PER_LIFE)
+	pl.ph_shockwave_charges = (roundPowerUp == "shockwave") and SHOCKWAVE_CHARGES_PER_LIFE or 0
+	pl:SetNWInt("PH_ShockwaveCharges", pl.ph_shockwave_charges)
 end
 
 if CLIENT then
