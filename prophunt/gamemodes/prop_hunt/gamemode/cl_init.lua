@@ -53,6 +53,15 @@ function GM:CalcView(pl, origin, angles, fov)
  	return view 
 end
 
+-- Display names for the round's random power-up pick (PH_RoundPowerUp
+-- global, PROP_POWERUPS in sh_config.lua) - used by the HUD hint below.
+local POWERUP_DISPLAY_NAMES = {
+	decoy = "Decoy",
+	flashbang = "Flashbang",
+	liquid_trail = "Liquid Trail",
+	shockwave = "Shockwave"
+}
+
 
 -- Draw round timeleft and hunter release timeleft
 function HUDPaint()
@@ -91,22 +100,37 @@ function HUDPaint()
 				draw.DrawText("Hold [Space] near a wall to climb and stick to it.", "MyFont", 20, 100, Color(255, 255, 255, 255), TEXT_ALIGN_LEFT)
 			end
 
-			local decoyCharges = lp:GetNWInt("PH_DecoyCharges", 0)
-			local decoyColor = decoyCharges > 0 and Color(255, 220, 100, 255) or Color(150, 150, 150, 255)
-			draw.DrawText("Press [G] to drop a decoy. Charges left: "..decoyCharges, "MyFont", 20, 120, decoyColor, TEXT_ALIGN_LEFT)
+			-- Only ONE power-up is live this round (see PROP_POWERUPS in
+			-- sh_config.lua and GM:OnPreRoundStart in gamemode/init.lua) -
+			-- show which one, then only that power-up's specific hint line.
+			-- The other three abilities' charge counts are already zeroed
+			-- server-side (class_prop.lua:OnSpawn), so there's nothing to
+			-- show for them even if this block were skipped entirely.
+			local roundPowerUp = GetGlobalString("PH_RoundPowerUp", "")
+			draw.DrawText("This round's power-up: "..(POWERUP_DISPLAY_NAMES[roundPowerUp] or "none"), "MyFont", 20, 120, Color(255, 255, 255, 255), TEXT_ALIGN_LEFT)
 
-			local liquidCharges = lp:GetNWInt("PH_LiquidCharges", 0)
-			local liquidTrailEnd = lp:GetNWFloat("PH_LiquidTrailEndTime", 0)
-			if liquidTrailEnd > CurTime() then
-				draw.DrawText("Liquid trail active! ("..math.ceil(liquidTrailEnd - CurTime()).."s left)", "MyFont", 20, 140, Color(120, 255, 120, 255), TEXT_ALIGN_LEFT)
-			else
-				local liquidColor = liquidCharges > 0 and Color(120, 255, 120, 255) or Color(150, 150, 150, 255)
-				draw.DrawText("Press [H] to leave a ragdoll-trap trail. Charges left: "..liquidCharges, "MyFont", 20, 140, liquidColor, TEXT_ALIGN_LEFT)
+			if roundPowerUp == "decoy" then
+				local decoyCharges = lp:GetNWInt("PH_DecoyCharges", 0)
+				local decoyColor = decoyCharges > 0 and Color(255, 220, 100, 255) or Color(150, 150, 150, 255)
+				draw.DrawText("Press [G] to drop a decoy. Charges left: "..decoyCharges, "MyFont", 20, 140, decoyColor, TEXT_ALIGN_LEFT)
+			elseif roundPowerUp == "flashbang" then
+				local flashCharges = lp:GetAmmoCount("PHFlashbang")
+				local flashColor = flashCharges > 0 and Color(255, 220, 100, 255) or Color(150, 150, 150, 255)
+				draw.DrawText("Left click to throw your flashbang. Charges left: "..flashCharges, "MyFont", 20, 140, flashColor, TEXT_ALIGN_LEFT)
+			elseif roundPowerUp == "liquid_trail" then
+				local liquidCharges = lp:GetNWInt("PH_LiquidCharges", 0)
+				local liquidTrailEnd = lp:GetNWFloat("PH_LiquidTrailEndTime", 0)
+				if liquidTrailEnd > CurTime() then
+					draw.DrawText("Liquid trail active! ("..math.ceil(liquidTrailEnd - CurTime()).."s left)", "MyFont", 20, 140, Color(120, 255, 120, 255), TEXT_ALIGN_LEFT)
+				else
+					local liquidColor = liquidCharges > 0 and Color(120, 255, 120, 255) or Color(150, 150, 150, 255)
+					draw.DrawText("Press [H] to leave a ragdoll-trap trail. Charges left: "..liquidCharges, "MyFont", 20, 140, liquidColor, TEXT_ALIGN_LEFT)
+				end
+			elseif roundPowerUp == "shockwave" then
+				local shockwaveCharges = lp:GetNWInt("PH_ShockwaveCharges", 0)
+				local shockwaveColor = shockwaveCharges > 0 and Color(150, 200, 255, 255) or Color(150, 150, 150, 255)
+				draw.DrawText("Press [V] for a shockwave - stuns nearby Hunters through walls. Charges left: "..shockwaveCharges, "MyFont", 20, 140, shockwaveColor, TEXT_ALIGN_LEFT)
 			end
-
-			local shockwaveCharges = lp:GetNWInt("PH_ShockwaveCharges", 0)
-			local shockwaveColor = shockwaveCharges > 0 and Color(150, 200, 255, 255) or Color(150, 150, 150, 255)
-			draw.DrawText("Press [V] for a shockwave - stuns nearby Hunters through walls. Charges left: "..shockwaveCharges, "MyFont", 20, 160, shockwaveColor, TEXT_ALIGN_LEFT)
 		end
 
 		-- Purely client-side "you're stunned" feedback for the affected
@@ -146,8 +170,8 @@ end)
 
 -- Sends a PH_DropDecoy request to the server on the rising edge of [G] (down
 -- this tick, not down last tick) so holding the key doesn't spam drops every
--- frame. The server is still the authority on charges/team/round state -
--- this only decides when to ask.
+-- frame. The server is still the authority on charges/team/round state/
+-- which power-up is active this round - this only decides when to ask.
 local lastDecoyKey = false
 hook.Add("Think", "PH_DropDecoyThink", function()
 	local lp = LocalPlayer()
@@ -167,8 +191,7 @@ end)
 
 -- Sends a PH_ActivateLiquidTrail request on the rising edge of [H]. Same
 -- edge-detect pattern as the decoy/rotate-lock keys - server is still the
--- authority on charges/team/round state and on ignoring a repeat press
--- while already trailing.
+-- authority on charges/team/round state/active power-up.
 local lastLiquidKey = false
 hook.Add("Think", "PH_LiquidTrailThink", function()
 	local lp = LocalPlayer()
