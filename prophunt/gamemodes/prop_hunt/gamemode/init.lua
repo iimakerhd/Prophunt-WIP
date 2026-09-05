@@ -53,6 +53,7 @@ util.AddNetworkString("PH_PropTauntList")
 util.AddNetworkString("PlayerKilledByPlayer")
 util.AddNetworkString("PH_SetHunterModel")
 util.AddNetworkString("PH_UsePowerUp")
+util.AddNetworkString("PH_FlashbangPop")
 net.Receive("PH_RotateProp", function(len, pl)
 	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
 	if pl:GetNWBool("PH_RotateLocked", false) then return end
