@@ -51,6 +51,13 @@ end
 -- not stun-lock them in place. Line of sight is a straight world/brush trace
 -- from the pop to the Hunter's eyes; anything solid between them (a wall, a
 -- door) blocks the effect entirely rather than reducing it.
+--
+-- This runs on the SERVER (init.lua) - the effect/sound/gameplay logic below
+-- is all server-safe, but DynamicLight() is a CLIENT-ONLY function and was
+-- being called unconditionally, crashing this on dedicated/listen servers
+-- the instant a flashbang detonated. util.Effect() networks itself to
+-- nearby clients automatically, so a lightweight PH_FlashbangPop broadcast
+-- is used just to trigger the actual light client-side.
 function ENT:Detonate()
 	local origin = self:GetPos()
 
@@ -60,19 +67,9 @@ function ENT:Detonate()
 	edata:SetScale(1)
 	util.Effect("Sparks", edata)
 
-	-- Pure engine dynamic light for the actual "flash" - no content
-	-- dependency, so it always renders regardless of what's mounted.
-	local dlight = DynamicLight(self:EntIndex())
-	if dlight then
-		dlight.pos = origin
-		dlight.r = 255
-		dlight.g = 255
-		dlight.b = 255
-		dlight.brightness = 6
-		dlight.decay = 1000
-		dlight.size = 500
-		dlight.dietime = CurTime() + 0.6
-	end
+	net.Start("PH_FlashbangPop")
+		net.WriteVector(origin)
+	net.Broadcast()
 
 	-- Stock HL2 sound - placeholder "pop" until/unless a dedicated flashbang
 	-- sound is added to the addon's own content folder.
