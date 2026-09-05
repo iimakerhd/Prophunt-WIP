@@ -627,23 +627,43 @@ hook.Add("PlayerTick", "PH_UpdatePropPosition", function(pl, mv)
 	if !pl.ph_prop or !IsValid(pl.ph_prop) then return end
 
 	if pl.WallSticking and pl.WallNormal then
-		-- Nudge the disguised prop out along the wall's normal by roughly
-		-- its own depth, purely so it doesn't visually clip INTO the wall
-		-- surface as the player sticks to it - nothing else. This used to
-		-- ALSO force the prop's angle flush against the wall (like a
-		-- wall-mounted decoration), which is exactly the "correction" that
-		-- was reported as unwanted: the prop should keep looking like
-		-- itself while climbing, not get rotated into a different pose just
-		-- because the player happens to be stuck to a wall. Position still
-		-- needs to follow the player as they crawl around, but orientation
-		-- is now left completely untouched here - it stays whatever it
-		-- already was (its normal pickup orientation, or whatever the
-		-- player last set with the hold-R rotate control).
+		-- Nudge the disguised prop out along the wall's normal - just
+		-- enough to avoid clipping into the wall surface, nothing more.
+		--
+		-- The previous version computed this offset as
+		-- max(|mins.x|, |maxs.x|, |mins.y|, |maxs.y|) - the largest extent
+		-- across the prop's own LOCAL x/y axes. That's wrong for anything
+		-- that isn't roughly cube-shaped: it silently assumes the prop's
+		-- local x/y axes line up with "the flat, wall-facing dimensions",
+		-- which is only true by coincidence. A picture frame's local axes
+		-- don't care about wall orientation - its long/wide axis could be
+		-- local X, Z, or Y depending on how the model was authored - so
+		-- this frequently grabbed the frame's WIDTH instead of its
+		-- THICKNESS, producing exactly the large floating gap reported
+		-- (and making it obviously not a real wall picture).
+		--
+		-- Fixed by actually projecting the OBB half-extent onto the wall
+		-- normal, in the prop's OWN local space (where OBBMins/OBBMaxs are
+		-- defined) rather than assuming which world axis matters. The
+		-- world-space wall normal is rotated into the prop's local frame
+		-- (WorldToLocal with a zero origin - only the rotation matters for
+		-- a direction vector, not a position), then each local axis's
+		-- half-extent is weighted by how much the normal points along it.
+		-- This gives the prop's TRUE thickness in the direction it's being
+		-- pushed, whatever its actual shape or orientation. A small fixed
+		-- clearance is added on top purely to avoid z-fighting/clipping at
+		-- the surface itself.
 		local normal = pl.WallNormal
 		local mins = pl.ph_prop:OBBMins()
 		local maxs = pl.ph_prop:OBBMaxs()
-		local depth = math.max(math.abs(mins.x), math.abs(maxs.x), math.abs(mins.y), math.abs(maxs.y))
-		pl.ph_prop:SetPos(pl:GetPos() + normal * depth)
+
+		local localNormal = select(1, WorldToLocal(normal, angle_zero, vector_origin, pl.ph_prop:GetAngles()))
+
+		local depth = math.abs(localNormal.x) * math.max(math.abs(mins.x), math.abs(maxs.x))
+			+ math.abs(localNormal.y) * math.max(math.abs(mins.y), math.abs(maxs.y))
+			+ math.abs(localNormal.z) * math.max(math.abs(mins.z), math.abs(maxs.z))
+
+		pl.ph_prop:SetPos(pl:GetPos() + normal * (depth + 2))
 	else
 		local z = pl.ph_prop:OBBMins().z
 		if z > 0 then z = 0 end
