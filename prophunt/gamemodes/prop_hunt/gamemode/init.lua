@@ -627,19 +627,23 @@ hook.Add("PlayerTick", "PH_UpdatePropPosition", function(pl, mv)
 	if !pl.ph_prop or !IsValid(pl.ph_prop) then return end
 
 	if pl.WallSticking and pl.WallNormal then
-		-- Flush-mount the disguised prop against the wall it's stuck to: push
-		-- it out along the wall's normal by roughly the prop's own depth (so
-		-- it sits on the wall surface rather than clipping through it), and
-		-- orient it so its "up" faces away from the wall (lying flush against
-		-- it, like a wall-mounted decoration).
+		-- Nudge the disguised prop out along the wall's normal by roughly
+		-- its own depth, purely so it doesn't visually clip INTO the wall
+		-- surface as the player sticks to it - nothing else. This used to
+		-- ALSO force the prop's angle flush against the wall (like a
+		-- wall-mounted decoration), which is exactly the "correction" that
+		-- was reported as unwanted: the prop should keep looking like
+		-- itself while climbing, not get rotated into a different pose just
+		-- because the player happens to be stuck to a wall. Position still
+		-- needs to follow the player as they crawl around, but orientation
+		-- is now left completely untouched here - it stays whatever it
+		-- already was (its normal pickup orientation, or whatever the
+		-- player last set with the hold-R rotate control).
 		local normal = pl.WallNormal
 		local mins = pl.ph_prop:OBBMins()
 		local maxs = pl.ph_prop:OBBMaxs()
 		local depth = math.max(math.abs(mins.x), math.abs(maxs.x), math.abs(mins.y), math.abs(maxs.y))
 		pl.ph_prop:SetPos(pl:GetPos() + normal * depth)
-
-		local ang = normal:Angle()
-		pl.ph_prop:SetAngles(Angle(ang.p - 90, ang.y, 0))
 	else
 		local z = pl.ph_prop:OBBMins().z
 		if z > 0 then z = 0 end
