@@ -15,8 +15,8 @@ local BOUNDS_MAX = Vector(24, 24, 12)
 -- by whoever spawns it (see PH_ActivateLiquidTrail in gamemode/init.lua).
 function ENT:Initialize()
 	-- Never actually drawn - see cl_init.lua's Draw(), which renders a
-	-- glowing green sprite instead. Kleiner is reused purely as a
-	-- guaranteed-valid, always-present model for collision setup, same
+	-- glowing yellow liquid-puddle sprite instead. Kleiner is reused purely
+	-- as a guaranteed-valid, always-present model for collision setup, same
 	-- placeholder choice already made in ph_decoy/init.lua.
 	self:SetModel("models/player/Kleiner.mdl")
 	self:SetCollisionBounds(BOUNDS_MIN, BOUNDS_MAX)
@@ -25,6 +25,13 @@ function ENT:Initialize()
 	self:SetMoveType(MOVETYPE_NONE)
 	self:SetCollisionGroup(COLLISION_GROUP_WORLD)
 	self:Activate()
+
+	-- Overriding Draw() (cl_init.lua) only replaces the entity's main
+	-- render pass - it does NOT stop the engine's separate dynamic-shadow
+	-- pass, which still runs off the underlying model regardless. Without
+	-- this, every "invisible" puddle segment was silently casting a
+	-- Kleiner-shaped shadow on the ground underneath it.
+	self:DrawShadow(false)
 
 	-- Self-removes once its lifetime is up, regardless of whether it's ever
 	-- touched - a trap that's still sitting there minutes later would be
