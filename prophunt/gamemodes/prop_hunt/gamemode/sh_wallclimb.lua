@@ -70,6 +70,7 @@ if SERVER then
 
 		pl.WallSticking = false
 		pl.WallNormal = nil
+		pl.WallHitPos = nil
 		pl:SetMoveType(MOVETYPE_WALK)
 		pl:SetNWBool("PH_WallSticking", false)
 
@@ -78,9 +79,18 @@ if SERVER then
 		end
 	end
 
-	local function StartClimb(pl, normal)
+	local function StartClimb(pl, normal, hitPos)
 		pl.WallSticking = true
 		pl.WallNormal = normal
+		-- The actual traced point ON the wall surface - NOT the player's own
+		-- position, which can be anywhere up to WALLCLIMB_MAX_DIST away from
+		-- the wall (you only need to be near it and looking at it to grab
+		-- it, not touching it). PH_UpdatePropPosition (gamemode/init.lua)
+		-- anchors the disguised prop to THIS point, not pl:GetPos() - using
+		-- the player's position there was the real bug behind the
+		-- persistent gap between the prop and the wall: it measured the
+		-- offset correctly but from the wrong starting point entirely.
+		pl.WallHitPos = hitPos
 		pl:SetMoveType(MOVETYPE_NONE) -- fully server-driven position while stuck; no gravity, no built-in input movement to fight
 		pl:SetNWBool("PH_WallSticking", true)
 		pl:SetNWVector("PH_WallNormal", normal)
@@ -104,6 +114,7 @@ if SERVER then
 
 		if tr.Hit and math.abs(tr.HitNormal.z) < WALLCLIMB_MAX_SLOPE then
 			pl.WallNormal = tr.HitNormal
+			pl.WallHitPos = tr.HitPos
 			pl:SetNWVector("PH_WallNormal", pl.WallNormal)
 		else
 			StopClimb(pl, false)
@@ -175,7 +186,7 @@ if SERVER then
 				})
 
 				if tr.Hit and math.abs(tr.HitNormal.z) < WALLCLIMB_MAX_SLOPE then
-					StartClimb(pl, tr.HitNormal)
+					StartClimb(pl, tr.HitNormal, tr.HitPos)
 				end
 				-- If no wall found in range, holding the key does nothing
 				-- special (falls through to normal jump behaviour).
