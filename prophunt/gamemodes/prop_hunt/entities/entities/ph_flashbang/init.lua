@@ -7,13 +7,6 @@ AddCSLuaFile("shared.lua")
 include("shared.lua")
 
 
--- Fixed time-to-detonate after being thrown, regardless of whether it's hit
--- anything yet - simpler and more predictable than trying to detect a "first
--- bounce" like a real flashbang, and avoids edge cases where a throw down a
--- vent or into open space would never register an impact at all.
-local FUSE_TIME = 1.5
-
-
 function ENT:Initialize()
 	self:SetModel("models/Weapons/w_grenade.mdl")
 	self:PhysicsInit(SOLID_VPHYSICS)
@@ -27,7 +20,13 @@ function ENT:Initialize()
 		phys:SetMass(5)
 	end
 
-	self.DetonateAt = CurTime() + FUSE_TIME
+	-- Fixed time-to-detonate after being thrown, regardless of whether it's
+	-- hit anything yet - simpler and more predictable than trying to detect
+	-- a "first bounce" like a real flashbang, and avoids edge cases where a
+	-- throw down a vent or into open space would never register an impact
+	-- at all. FLASHBANG_FUSE_TIME lives in sh_config.lua alongside the
+	-- rest of the flashbang's tunables.
+	self.DetonateAt = CurTime() + FLASHBANG_FUSE_TIME
 	self:NextThink(CurTime())
 end
 
