@@ -63,6 +63,10 @@ FLASHBANG_RADIUS = 450
 FLASHBANG_DURATION = 4
 
 
+-- Seconds between the flashbang landing and it actually detonating (Default: 0.7)
+FLASHBANG_FUSE_TIME = 0.7
+
+
 -- Number of times a prop can activate the liquid trail power-up per life,
 -- when liquid trail is this round's power-up (Default: 2)
 LIQUID_TRAIL_CHARGES_PER_LIFE = 2
