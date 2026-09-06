@@ -163,6 +163,13 @@ end
 -- can't collide with another player's - stopped early via
 -- meta:StopLiquidTrail() on death/disconnect, or naturally once the active
 -- window ends.
+--
+-- Each new segment is told where the PREVIOUS one landed (pl.ph_last_liquid_pos)
+-- so it can draw a connecting ribbon back to it (ph_liquid_trail/cl_init.lua) -
+-- that's what turns this from a line of separate glowing dots into an
+-- actual continuous spill/stream visual. Reset to nil at the start of a
+-- fresh activation so a new trail never visually connects back to wherever
+-- a previous (possibly long-expired) trail left off.
 local function PH_UsePowerUp_LiquidTrail(pl)
 	if pl.ph_liquid_trail_active then return end -- already trailing, ignore repeat presses
 
@@ -173,6 +180,7 @@ local function PH_UsePowerUp_LiquidTrail(pl)
 	pl:SetNWInt("PH_LiquidCharges", pl.ph_liquid_charges)
 
 	pl.ph_liquid_trail_active = true
+	pl.ph_last_liquid_pos = nil
 	local endTime = CurTime() + LIQUID_TRAIL_ACTIVE_TIME
 	pl:SetNWFloat("PH_LiquidTrailEndTime", endTime)
 
@@ -188,6 +196,12 @@ local function PH_UsePowerUp_LiquidTrail(pl)
 			segment:SetPos(pl:GetPos())
 			segment:SetOwner(pl)
 			segment:Spawn()
+
+			if pl.ph_last_liquid_pos then
+				segment:SetNWVector("PH_PrevPos", pl.ph_last_liquid_pos)
+				segment:SetNWBool("PH_HasPrev", true)
+			end
+			pl.ph_last_liquid_pos = segment:GetPos()
 		end
 	end)
 end
@@ -628,27 +642,48 @@ hook.Add("PlayerTick", "PH_UpdatePropPosition", function(pl, mv)
 
 	if pl.WallSticking and pl.WallNormal and pl.WallHitPos then
 		-- Anchor to the ACTUAL traced point on the wall surface
-		-- (pl.WallHitPos, set in sh_wallclimb.lua) rather than the player's
-		-- own position. This was the real bug behind the persistent gap:
-		-- pl:GetPos() can be anywhere up to the wall-grab range away from
-		-- the wall itself (you only need to be near it and looking at it to
-		-- stick, not touching it) - so no matter how correct the depth
-		-- offset math was, it was always being measured from the wrong
-		-- starting point. Depth itself is still the OBB half-extent
-		-- projected onto the wall normal in the prop's own local space (see
-		-- below), which correctly finds the prop's true thickness in the
-		-- push direction regardless of its shape/orientation.
+		-- (pl.WallHitPos, set in sh_wallclimb.lua), not the player's own
+		-- position - that part of the earlier fix was correct and stays.
+		--
+		-- What was STILL wrong: the depth offset assumed the prop's
+		-- collision bounds are roughly centered on its own origin (i.e.
+		-- that "half the box width" is a meaningful notion of "distance
+		-- from origin to near face"). That's false for most Source props -
+		-- their origin usually sits at the BASE of the model, not its
+		-- center, so mins/maxs are frequently asymmetric (e.g.
+		-- mins.z = 0, maxs.z = 90). Using max(|min|,|max|) as a half-extent
+		-- from a centered origin has no defined relationship to where the
+		-- model's actual near face is when the origin isn't centered - it
+		-- could wildly over- or under-shoot depending on the model, which
+		-- is exactly the "still a big gap" result.
+		--
+		-- Correct approach: find which of the box's 8 actual corners sits
+		-- CLOSEST to the wall (most negative projection onto the wall
+		-- normal, in world orientation), then solve for the origin
+		-- position that puts THAT specific corner exactly on the wall
+		-- surface (plus a small clearance). This is exact regardless of
+		-- where the origin sits inside the model or how asymmetric its
+		-- bounds are - it directly answers "where must the origin be so
+		-- the nearest point of the actual box touches the wall", rather
+		-- than approximating from a symmetry assumption that doesn't hold.
 		local normal = pl.WallNormal
 		local mins = pl.ph_prop:OBBMins()
 		local maxs = pl.ph_prop:OBBMaxs()
+		local ang = pl.ph_prop:GetAngles()
 
-		local localNormal = select(1, WorldToLocal(normal, angle_zero, vector_origin, pl.ph_prop:GetAngles()))
+		local minProj = math.huge
+		for _, cx in ipairs({mins.x, maxs.x}) do
+			for _, cy in ipairs({mins.y, maxs.y}) do
+				for _, cz in ipairs({mins.z, maxs.z}) do
+					local worldCorner = select(1, LocalToWorld(Vector(cx, cy, cz), angle_zero, vector_origin, ang))
+					local proj = worldCorner:Dot(normal)
+					if proj < minProj then minProj = proj end
+				end
+			end
+		end
 
-		local depth = math.abs(localNormal.x) * math.max(math.abs(mins.x), math.abs(maxs.x))
-			+ math.abs(localNormal.y) * math.max(math.abs(mins.y), math.abs(maxs.y))
-			+ math.abs(localNormal.z) * math.max(math.abs(mins.z), math.abs(maxs.z))
-
-		pl.ph_prop:SetPos(pl.WallHitPos + normal * (depth + 1))
+		local clearance = 1
+		pl.ph_prop:SetPos(pl.WallHitPos + normal * (clearance - minProj))
 	else
 		local z = pl.ph_prop:OBBMins().z
 		if z > 0 then z = 0 end
