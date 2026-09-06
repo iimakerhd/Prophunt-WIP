@@ -626,33 +626,18 @@ hook.Add("PlayerTick", "PH_UpdatePropPosition", function(pl, mv)
 	if !IsValid(pl) or pl:Team() != TEAM_PROPS or !pl:Alive() then return end
 	if !pl.ph_prop or !IsValid(pl.ph_prop) then return end
 
-	if pl.WallSticking and pl.WallNormal then
-		-- Nudge the disguised prop out along the wall's normal - just
-		-- enough to avoid clipping into the wall surface, nothing more.
-		--
-		-- The previous version computed this offset as
-		-- max(|mins.x|, |maxs.x|, |mins.y|, |maxs.y|) - the largest extent
-		-- across the prop's own LOCAL x/y axes. That's wrong for anything
-		-- that isn't roughly cube-shaped: it silently assumes the prop's
-		-- local x/y axes line up with "the flat, wall-facing dimensions",
-		-- which is only true by coincidence. A picture frame's local axes
-		-- don't care about wall orientation - its long/wide axis could be
-		-- local X, Z, or Y depending on how the model was authored - so
-		-- this frequently grabbed the frame's WIDTH instead of its
-		-- THICKNESS, producing exactly the large floating gap reported
-		-- (and making it obviously not a real wall picture).
-		--
-		-- Fixed by actually projecting the OBB half-extent onto the wall
-		-- normal, in the prop's OWN local space (where OBBMins/OBBMaxs are
-		-- defined) rather than assuming which world axis matters. The
-		-- world-space wall normal is rotated into the prop's local frame
-		-- (WorldToLocal with a zero origin - only the rotation matters for
-		-- a direction vector, not a position), then each local axis's
-		-- half-extent is weighted by how much the normal points along it.
-		-- This gives the prop's TRUE thickness in the direction it's being
-		-- pushed, whatever its actual shape or orientation. A small fixed
-		-- clearance is added on top purely to avoid z-fighting/clipping at
-		-- the surface itself.
+	if pl.WallSticking and pl.WallNormal and pl.WallHitPos then
+		-- Anchor to the ACTUAL traced point on the wall surface
+		-- (pl.WallHitPos, set in sh_wallclimb.lua) rather than the player's
+		-- own position. This was the real bug behind the persistent gap:
+		-- pl:GetPos() can be anywhere up to the wall-grab range away from
+		-- the wall itself (you only need to be near it and looking at it to
+		-- stick, not touching it) - so no matter how correct the depth
+		-- offset math was, it was always being measured from the wrong
+		-- starting point. Depth itself is still the OBB half-extent
+		-- projected onto the wall normal in the prop's own local space (see
+		-- below), which correctly finds the prop's true thickness in the
+		-- push direction regardless of its shape/orientation.
 		local normal = pl.WallNormal
 		local mins = pl.ph_prop:OBBMins()
 		local maxs = pl.ph_prop:OBBMaxs()
@@ -663,7 +648,7 @@ hook.Add("PlayerTick", "PH_UpdatePropPosition", function(pl, mv)
 			+ math.abs(localNormal.y) * math.max(math.abs(mins.y), math.abs(maxs.y))
 			+ math.abs(localNormal.z) * math.max(math.abs(mins.z), math.abs(maxs.z))
 
-		pl.ph_prop:SetPos(pl:GetPos() + normal * (depth + 2))
+		pl.ph_prop:SetPos(pl.WallHitPos + normal * (depth + 1))
 	else
 		local z = pl.ph_prop:OBBMins().z
 		if z > 0 then z = 0 end
