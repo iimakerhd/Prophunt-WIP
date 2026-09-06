@@ -102,8 +102,10 @@ SHOCKWAVE_CHARGES_PER_LIFE = 1
 
 -- Radius (in units) a shockwave stuns Hunters within, centered on the prop's
 -- current position. No line-of-sight check - unlike FLASHBANG_RADIUS, a wall
--- between the prop and a Hunter does NOT block it. (Default: 350)
-SHOCKWAVE_RADIUS = 350
+-- between the prop and a Hunter does NOT block it. Bumped up from the
+-- original 350 - the effect felt too small/underwhelming for what's meant
+-- to be a "panic button" ability. (Default: 450)
+SHOCKWAVE_RADIUS = 450
 
 
 -- Seconds a Hunter is stunned (frozen in place, but NOT hidden/ragdolled -
