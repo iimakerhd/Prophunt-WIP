@@ -192,6 +192,64 @@ hook.Add("Think", "PH_UsePowerUpThink", function()
 	lastPowerUpKey = down
 end)
 
+-- ===========================================================================
+-- Shockwave expanding ring - purely visual, shows the true SHOCKWAVE_RADIUS
+-- so the effect actually communicates how far it reaches instead of just a
+-- small flash and a screenshake. Triggered by PH_ShockwavePulse
+-- (gamemode/init.lua, broadcast right when the shockwave fires).
+--
+-- Drawn as a ring of short beam segments (no dependency on any special ring
+-- texture/material) that grows from 0 to the real radius over RING_DURATION
+-- seconds while fading out, so what you see IS the actual affected area,
+-- not just a decorative effect at a fixed size.
+-- ===========================================================================
+
+local activeShockwaveRings = {}
+local RING_DURATION = 0.5
+local RING_SEGMENTS = 40
+local RING_MATERIAL = Material("sprites/glow04_noz")
+local RING_COLOR = Color(150, 200, 255)
+
+net.Receive("PH_ShockwavePulse", function()
+	local origin = net.ReadVector()
+	local radius = net.ReadFloat()
+
+	table.insert(activeShockwaveRings, {
+		origin = origin,
+		radius = radius,
+		startTime = CurTime()
+	})
+end)
+
+hook.Add("PostDrawTranslucentRenderables", "PH_DrawShockwaveRings", function()
+	for i = #activeShockwaveRings, 1, -1 do
+		local wave = activeShockwaveRings[i]
+		local frac = (CurTime() - wave.startTime) / RING_DURATION
+
+		if frac >= 1 then
+			table.remove(activeShockwaveRings, i)
+			continue
+		end
+
+		local currentRadius = wave.radius * frac
+		local alpha = 255 * (1 - frac)
+
+		render.SetMaterial(RING_MATERIAL)
+
+		local prevPoint = nil
+		for seg = 0, RING_SEGMENTS do
+			local a = (seg / RING_SEGMENTS) * math.pi * 2
+			local point = wave.origin + Vector(math.cos(a) * currentRadius, math.sin(a) * currentRadius, 2)
+
+			if prevPoint then
+				render.DrawBeam(prevPoint, point, 10, 0, 1, Color(RING_COLOR.r, RING_COLOR.g, RING_COLOR.b, alpha))
+			end
+
+			prevPoint = point
+		end
+	end
+end)
+
 
 -- Called immediately after starting the gamemode 
 function Initialize()
