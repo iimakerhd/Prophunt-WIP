@@ -54,6 +54,7 @@ util.AddNetworkString("PlayerKilledByPlayer")
 util.AddNetworkString("PH_SetHunterModel")
 util.AddNetworkString("PH_UsePowerUp")
 util.AddNetworkString("PH_FlashbangPop")
+util.AddNetworkString("PH_ShockwavePulse")
 net.Receive("PH_RotateProp", function(len, pl)
 	if !IsValid(pl) || !pl:Alive() || pl:Team() != TEAM_PROPS then return end
 	if pl:GetNWBool("PH_RotateLocked", false) then return end
@@ -214,6 +215,14 @@ end
 -- also why it only gets SHOCKWAVE_CHARGES_PER_LIFE charges (default 1) -
 -- it's meant to be a rare "get me out of trouble" panic button, not a
 -- repeatable area denial tool.
+--
+-- Broadcasts PH_ShockwavePulse (origin + radius) so every client can render
+-- an actual expanding ring at the true SHOCKWAVE_RADIUS distance
+-- (gamemode/cl_init.lua) - the previous version only had a small fixed-size
+-- "cball_explode" puff and a screenshake, which didn't communicate how far
+-- the effect actually reached and felt underwhelming for what's meant to be
+-- a "panic button". The flash/shake here are also bumped up to feel more
+-- like a real area-effect than a small pop.
 local function PH_UsePowerUp_Shockwave(pl)
 	local charges = pl.ph_shockwave_charges or 0
 	if charges <= 0 then return end
@@ -225,17 +234,22 @@ local function PH_UsePowerUp_Shockwave(pl)
 
 	-- Stock HL2 effect/sound only - "cball_explode" is the built-in combine
 	-- ball detonation ring, a reasonable stand-in for a shockwave pulse with
-	-- zero content dependency. Physcannon energy sound reused for a thematic
-	-- "electric zap" without needing a dedicated sound file.
+	-- zero content dependency. Scale bumped up from a flat 1 so the initial
+	-- flash itself reads as bigger, not just the (now visible) ring.
 	local edata = EffectData()
 	edata:SetOrigin(origin)
-	edata:SetScale(1)
+	edata:SetScale(4)
 	util.Effect("cball_explode", edata)
 
-	util.ScreenShake(origin, 8, 4, 0.6, SHOCKWAVE_RADIUS)
+	util.ScreenShake(origin, 12, 5, 0.7, SHOCKWAVE_RADIUS)
 
 	local zapSound = CreateSound(pl, "weapons/physcannon/energy_bounce1.wav")
 	zapSound:PlayEx(1, 100)
+
+	net.Start("PH_ShockwavePulse")
+		net.WriteVector(origin)
+		net.WriteFloat(SHOCKWAVE_RADIUS)
+	net.Broadcast()
 
 	for _, hunter in pairs(team.GetPlayers(TEAM_HUNTERS)) do
 		if !IsValid(hunter) or !hunter:Alive() then continue end
